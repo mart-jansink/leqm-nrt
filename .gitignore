@@ -7,4 +7,4 @@ src/Makefile
 src/leqm-nrt
 src/leqm-nrt.o
 stamp-h1
-
+test
