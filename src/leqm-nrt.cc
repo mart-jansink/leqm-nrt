@@ -607,12 +607,14 @@ void * worker_function(void * argstruct) {
 
   struct WorkerArgs * thisWorkerArgs = (struct WorkerArgs *) argstruct;
 
-  auto sum_and_square_buffer = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
-  auto c_sum_and_square_buffer = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
-  auto ch_sum_accumulator_norm = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
-  auto ch_sum_accumulator_conv = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
+  int const frames = thisWorkerArgs->nsamples / thisWorkerArgs->nch;
 
-  for (int i = 0; i < thisWorkerArgs->nsamples / thisWorkerArgs->nch; i++) {
+  auto sum_and_square_buffer = new double[frames];
+  auto c_sum_and_square_buffer = new double[frames];
+  auto ch_sum_accumulator_norm = new double[frames];
+  auto ch_sum_accumulator_conv = new double[frames];
+
+  for (int i = 0; i < frames; i++) {
     sum_and_square_buffer[i] = 0.0;
     c_sum_and_square_buffer[i] = 0.0;
     ch_sum_accumulator_norm[i] = 0.0;
@@ -621,8 +623,8 @@ void * worker_function(void * argstruct) {
 
   for (int ch = 0; ch < thisWorkerArgs->nch; ch++) {
 
-    auto normalized_buffer = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
-    auto convolved_buffer = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
+    auto normalized_buffer = new double[frames];
+    auto convolved_buffer = new double[frames];
 
     for (int n=ch, m= 0; n < thisWorkerArgs->nsamples; n += thisWorkerArgs->nch, m++) {
 	    // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
@@ -631,13 +633,13 @@ void * worker_function(void * argstruct) {
     }
 
  //convolution
- convolv_buff(normalized_buffer, convolved_buffer, thisWorkerArgs->ir, thisWorkerArgs->nsamples / thisWorkerArgs->nch, thisWorkerArgs->npoints * 2);
+ convolv_buff(normalized_buffer, convolved_buffer, thisWorkerArgs->ir, frames, thisWorkerArgs->npoints * 2);
  //rectify, square und sum
- rectify(c_sum_and_square_buffer, convolved_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
- rectify(sum_and_square_buffer, normalized_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+ rectify(c_sum_and_square_buffer, convolved_buffer, frames);
+ rectify(sum_and_square_buffer, normalized_buffer, frames);
 
- accumulatech(ch_sum_accumulator_norm, sum_and_square_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
- accumulatech(ch_sum_accumulator_conv, c_sum_and_square_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+ accumulatech(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
+ accumulatech(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
 
 
  delete[] normalized_buffer;
@@ -651,14 +653,14 @@ void * worker_function(void * argstruct) {
     //Create a function for this also a tag so that the worker know if he has to do this or not
 
   if (thisWorkerArgs->leqm10flag) {
-    thisWorkerArgs->shorttermarray[thisWorkerArgs->shorttermindex] = sumandshorttermavrg(ch_sum_accumulator_conv, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+    thisWorkerArgs->shorttermarray[thisWorkerArgs->shorttermindex] = sumandshorttermavrg(ch_sum_accumulator_conv, frames);
     #ifdef DEBUG
     printf("%d: %.6f\n", thisWorkerArgs->shorttermindex, thisWorkerArgs->shorttermarray[thisWorkerArgs->shorttermindex]);
     #endif
   }
   pthread_mutex_lock(&mutex);
   // this should be done under mutex conditions -> shared resources!
-  sumsamples(thisWorkerArgs->ptrtotsum, ch_sum_accumulator_norm, ch_sum_accumulator_conv, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+  sumsamples(thisWorkerArgs->ptrtotsum, ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
   pthread_mutex_unlock(&mutex);
 
 
