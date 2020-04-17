@@ -607,42 +607,25 @@ void * worker_function(void * argstruct) {
 
   struct WorkerArgs * thisWorkerArgs = (struct WorkerArgs *) argstruct;
 
-   double * sumandsquarebuffer;
-   double * csumandsquarebuffer;
-  double * chsumaccumulator_norm;
-  double * chsumaccumulator_conv;
-
-
-  sumandsquarebuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-
-
-  csumandsquarebuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-
-  chsumaccumulator_norm = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-
-  chsumaccumulator_conv = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-
-
+  auto sum_and_square_buffer = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
+  auto c_sum_and_square_buffer = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
+  auto ch_sum_accumulator_norm = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
+  auto ch_sum_accumulator_conv = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
 
   for (int i = 0; i < thisWorkerArgs->nsamples / thisWorkerArgs->nch; i++) {
-    sumandsquarebuffer[i] = 0.0;
-    csumandsquarebuffer[i] = 0.0;
-  chsumaccumulator_norm[i] = 0.0;
-  chsumaccumulator_conv[i] = 0.0;
+    sum_and_square_buffer[i] = 0.0;
+    c_sum_and_square_buffer[i] = 0.0;
+    ch_sum_accumulator_norm[i] = 0.0;
+    ch_sum_accumulator_conv[i] = 0.0;
   }
-
-
 
   for (int ch = 0; ch < thisWorkerArgs->nch; ch++) {
 
     double * normalizedbuffer;
     double * convolvedbuffer;
 
-
     normalizedbuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-
     convolvedbuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-
 
     for (int n=ch, m= 0; n < thisWorkerArgs->nsamples; n += thisWorkerArgs->nch, m++) {
      // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
@@ -655,11 +638,11 @@ void * worker_function(void * argstruct) {
  //convolution
  convolv_buff(normalizedbuffer, convolvedbuffer, thisWorkerArgs->ir, thisWorkerArgs->nsamples / thisWorkerArgs->nch, thisWorkerArgs->npoints * 2);
  //rectify, square und sum
- rectify(csumandsquarebuffer,convolvedbuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
- rectify(sumandsquarebuffer,normalizedbuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+ rectify(c_sum_and_square_buffer,convolvedbuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+ rectify(sum_and_square_buffer,normalizedbuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
 
- accumulatech(chsumaccumulator_norm, sumandsquarebuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
- accumulatech(chsumaccumulator_conv, csumandsquarebuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+ accumulatech(ch_sum_accumulator_norm, sum_and_square_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+ accumulatech(ch_sum_accumulator_conv, c_sum_and_square_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
 
 
  free(normalizedbuffer);
@@ -673,28 +656,28 @@ void * worker_function(void * argstruct) {
     //Create a function for this also a tag so that the worker know if he has to do this or not
 
   if (thisWorkerArgs->leqm10flag) {
-    thisWorkerArgs->shorttermarray[thisWorkerArgs->shorttermindex] = sumandshorttermavrg(chsumaccumulator_conv, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+    thisWorkerArgs->shorttermarray[thisWorkerArgs->shorttermindex] = sumandshorttermavrg(ch_sum_accumulator_conv, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
     #ifdef DEBUG
     printf("%d: %.6f\n", thisWorkerArgs->shorttermindex, thisWorkerArgs->shorttermarray[thisWorkerArgs->shorttermindex]);
     #endif
   }
   pthread_mutex_lock(&mutex);
   // this should be done under mutex conditions -> shared resources!
-  sumsamples(thisWorkerArgs->ptrtotsum, chsumaccumulator_norm, chsumaccumulator_conv, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+  sumsamples(thisWorkerArgs->ptrtotsum, ch_sum_accumulator_norm, ch_sum_accumulator_conv, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
   pthread_mutex_unlock(&mutex);
 
 
-  free(sumandsquarebuffer);
-  sumandsquarebuffer=NULL;
+  delete[] sum_and_square_buffer;
+  sum_and_square_buffer = nullptr;
 
-  free(csumandsquarebuffer);
-  csumandsquarebuffer=NULL;
+  delete[] c_sum_and_square_buffer;
+  c_sum_and_square_buffer = nullptr;
 
-  free(chsumaccumulator_norm);
-  chsumaccumulator_norm=NULL;
+  delete[] ch_sum_accumulator_norm;
+  ch_sum_accumulator_conv = nullptr;
 
-  free(chsumaccumulator_conv);
-  chsumaccumulator_conv=NULL;
+  delete[] ch_sum_accumulator_conv;
+  ch_sum_accumulator_conv = nullptr;
 
   free(thisWorkerArgs->argbuffer);
   thisWorkerArgs->argbuffer = NULL;
