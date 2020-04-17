@@ -65,7 +65,7 @@ struct Sum {
 };
 
 struct WorkerArgs {
-  double * argbuffer;
+  double * arg_buffer;
   int nsamples;
   int nch;
   int npoints;
@@ -131,7 +131,7 @@ int main(int argc, const char ** argv)
   FILE *leqmlogfile;
   leqmlogfile = NULL;
   int buffersizems = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
-  int buffersizesamples;
+  int buffer_size_samples;
   	double tempchcal[128];
 	int numcalread = 0;
 	double * shorttermaveragedarray;
@@ -335,7 +335,7 @@ int main(int argc, const char ** argv)
  */
  double * buffer;
  // buffer = new double [BUFFER_LEN];
- //buffersizesamples = (sfinfo.samplerate*sfinfo.channels*buffersizems)/1000;
+ //buffer_size_samples = (sfinfo.samplerate*sfinfo.channels*buffersizems)/1000;
  if ((sfinfo.samplerate*buffersizems)%1000) {
    printf("Please fine tune the buffersize according to the sample rate\n");
    //close file
@@ -344,8 +344,8 @@ int main(int argc, const char ** argv)
    return 1;
  }
 
-  buffersizesamples = (sfinfo.samplerate*sfinfo.channels*buffersizems)/1000;
-  buffer = (double *) malloc(sizeof(double)*buffersizesamples);
+  buffer_size_samples = (sfinfo.samplerate*sfinfo.channels*buffersizems)/1000;
+  buffer = new double[buffer_size_samples];
 
  samplingfreq = sfinfo.samplerate;
 
@@ -444,7 +444,7 @@ int main(int argc, const char ** argv)
  int staindex = 0; //shorttermarrayindex
 
 
- while((samples_read = sf_read_double(file, buffer, buffersizesamples)) > 0) {
+ while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
 
    WorkerArgsArray[worker_id] = (WorkerArgs *) malloc(sizeof(struct WorkerArgs));
    WorkerArgsArray[worker_id]->nsamples = samples_read;
@@ -463,8 +463,8 @@ int main(int argc, const char ** argv)
      WorkerArgsArray[worker_id]->leqm10flag = 0;
    }
 
-   WorkerArgsArray[worker_id]->argbuffer = (double *) malloc(sizeof(double)*buffersizesamples);
-   memcpy(WorkerArgsArray[worker_id]->argbuffer, buffer, samples_read*sizeof(double));
+   WorkerArgsArray[worker_id]->arg_buffer = new double[buffer_size_samples];
+   memcpy(WorkerArgsArray[worker_id]->arg_buffer, buffer, samples_read*sizeof(double));
 
 
    pthread_attr_t attr;
@@ -477,8 +477,8 @@ int main(int argc, const char ** argv)
        //maybe here wait for all cores to output before going on
        for (int idxcpu = 0; idxcpu < numCPU; idxcpu++) {
        pthread_join(tid[idxcpu], NULL);
-      free(WorkerArgsArray[idxcpu]->argbuffer);
-      WorkerArgsArray[idxcpu]->argbuffer = NULL;
+       delete[] WorkerArgsArray[idxcpu]->arg_buffer;
+       WorkerArgsArray[idxcpu]->arg_buffer = nullptr;
        free(WorkerArgsArray[idxcpu]);
        WorkerArgsArray[idxcpu] = NULL;
        }
@@ -500,8 +500,8 @@ int main(int argc, const char ** argv)
  if (worker_id != 0) { // worker_id = 0 means the number of samples was divisible through the number of cpus
    for (int idxcpu = 0; idxcpu < worker_id; idxcpu++) { //worker_id is at this point one unit more than threads launched
      pthread_join(tid[idxcpu], NULL);
-     free(WorkerArgsArray[idxcpu]->argbuffer);
-     WorkerArgsArray[idxcpu]->argbuffer = NULL;
+     delete[] WorkerArgsArray[idxcpu]->arg_buffer;
+     WorkerArgsArray[idxcpu]->arg_buffer = nullptr;
      free(WorkerArgsArray[idxcpu]);
      WorkerArgsArray[idxcpu] = NULL;
    }
@@ -596,8 +596,8 @@ int main(int argc, const char ** argv)
 
  free(totsum);
  totsum = NULL;
- free(buffer);
- buffer=NULL;
+ delete[] buffer;
+ buffer = nullptr;
    return 0;
 }
 
@@ -629,7 +629,7 @@ void * worker_function(void * argstruct) {
     for (int n=ch, m= 0; n < thisWorkerArgs->nsamples; n += thisWorkerArgs->nch, m++) {
 	    // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
 	    //so not normalized but calibrated
-	    normalized_buffer[m] = thisWorkerArgs->argbuffer[n]*thisWorkerArgs->chconf[ch]; //this scale amplitude according to specified calibration
+	    normalized_buffer[m] = thisWorkerArgs->arg_buffer[n]*thisWorkerArgs->chconf[ch]; //this scale amplitude according to specified calibration
     }
 
  //convolution
@@ -676,8 +676,8 @@ void * worker_function(void * argstruct) {
   delete[] ch_sum_accumulator_conv;
   ch_sum_accumulator_conv = nullptr;
 
-  free(thisWorkerArgs->argbuffer);
-  thisWorkerArgs->argbuffer = NULL;
+  delete[] thisWorkerArgs->arg_buffer;
+  thisWorkerArgs->arg_buffer = nullptr;
   // the memory pointed to by this pointer is freed in main
   // it is the same memory for all worker
   // but it is necessary to set pointer to NULL otherwise free will not work later (really?)
