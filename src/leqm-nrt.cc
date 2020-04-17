@@ -1,5 +1,5 @@
 /*
-    leqm-nrt is a  non-real-time implementation 
+    leqm-nrt is a  non-real-time implementation
     of Leq(M) measurement according to ISO 21727:2004(E)
     "Cinematography -- Method of measurement of perceived
     loudness of motion-picture audio material"
@@ -145,7 +145,7 @@ int main(int argc, const char ** argv)
 
 	memset(&sfinfo, 0, sizeof(sfinfo));
 
-	
+
   if (argc == 1)
     { const char helptext[] = "Order of parameters is free.\nPossible parameters are:\n-convpoints <integer number> \tNumber of interpolation points for the filter. Default 64\n-numcpus <integer number> \tNumber of slave threads to speed up operation.\n-timing \t\t\tFor benchmarking speed.\n-leqnw\t Print out Leq without M Weighting\n-chconfcal <db correction> <db correction> <etc. so many times as channels>\n-logleqm10\n-logleqm\n-buffersize <milliseconds>\n";
       printf(helptext);
@@ -153,7 +153,7 @@ int main(int argc, const char ** argv)
       return 0;
   }
 
-    
+
     for (int in = 1; in < argc;) {
 
       if (!(strncmp(argv[in], "-", 1) == 0)) {
@@ -163,7 +163,7 @@ int main(int argc, const char ** argv)
 	    puts(sf_strerror(NULL));
 	    return 1;
 	  }
-	  
+
 	  strcpy(soundfilename, argv[in]);
 	     fileopenstate = 1;
 	     printf("Opened file: %s\n", argv[in]);
@@ -171,7 +171,7 @@ int main(int argc, const char ** argv)
 	     printf("Channels: %d\n", sfinfo.channels);
 	     printf("Format: %d\n", sfinfo.format);
 	     printf("Frames: %d\n", (int) sfinfo.frames);
-	     channelconfcalvector = malloc(sizeof(double) * sfinfo.channels);
+	     channelconfcalvector = (double *) malloc(sizeof(double) * sfinfo.channels);
 	     in++;
 	     continue;
 	} else {
@@ -183,11 +183,11 @@ int main(int argc, const char ** argv)
 
 
       if (strcmp(argv[in], "-chconfcal") == 0) {
-	/* as the order of parameter is free I have to postpone 
+	/* as the order of parameter is free I have to postpone
 	   the check for consistency with the number of channels.
-	   So first create a temporary array, whose number of element will be checked after 
-	   the parsing of the command line parameters is finished. 
-	   The calibration will be expressed in dB on the command line and converted to multiplier 
+	   So first create a temporary array, whose number of element will be checked after
+	   the parsing of the command line parameters is finished.
+	   The calibration will be expressed in dB on the command line and converted to multiplier
 	   here so that it can be stored as a factor in the channelconfcalvector.
 	*/
 
@@ -199,39 +199,39 @@ int main(int argc, const char ** argv)
 	  tempchcal[numcalread++]=atof(argv[in++]);
 	  } else break;
 	} else break;
-	
+
 	} //for
 	continue;
       }
- 
+
          if (strcmp(argv[in], "-convpoints") == 0) {
 	     npoints = atoi(argv[in + 1]);
 	     in+=2;
 	     printf("Convolution points sets to %d.\n", npoints);
 	     continue;
-	
+
       }
-	    
-	    
+
+
 	        if (strcmp(argv[in], "-version") == 0) {
 	     in++;
 	     printf("leqm-nrt version 0.18\n");
 	     continue;
-	
+
       }
 	      if (strcmp(argv[in], "-numcpus") == 0) {
 		numCPU= atoi(argv[in + 1]);
 	     in+=2;
 	     printf("Number of threads manually set to %d. Default is number of cores in the system minus one.\n", numCPU);
 	     continue;
-	
+
       }
 	      if (strcmp(argv[in], "-timing") == 0) {
 		timing = 1;
 	     in++;
 	     printf("Execution time will be measured.\n");
 	     continue;
-	
+
       }
 
 	      	      if (strcmp(argv[in], "-logleqm10") == 0) {
@@ -239,14 +239,14 @@ int main(int argc, const char ** argv)
 	     in++;
 	     printf("Leq(M)10 data will be logged to the file leqm10.txt\n");
 	     continue;
-	
+
       }
 		      	      	      if (strcmp(argv[in], "-logleqm") == 0) {
 		leqmlog = 1;
 	     in++;
 	     printf("Leq(M) data will be logged to the file leqmlog.txt\n");
 	     continue;
-	
+
       }
 
 	     	      	      	      if (strcmp(argv[in], "-leqnw") == 0) {
@@ -254,7 +254,7 @@ int main(int argc, const char ** argv)
 	     in++;
 	     printf("Leq(nW) - unweighted -  will be outputted.\n");
 	     continue;
-	
+
       }
 
 				        if (strcmp(argv[in], "-buffersize") == 0) {
@@ -262,7 +262,7 @@ int main(int argc, const char ** argv)
 	     in+=2;
 	     printf("Buffersize will be set to %d milliseconds.\n", buffersizems);
 	     continue;
-	
+
       }
 
 					if (parameterstate==0) {
@@ -275,7 +275,7 @@ int main(int argc, const char ** argv)
     if (numcalread == sfinfo.channels) {
       for (int cind = 0; cind < sfinfo.channels; cind++) {
 	channelconfcalvector[cind] = convloglin_single(tempchcal[cind]);
-	
+
       }
     }
     else if ((numcalread == 0) && (sfinfo.channels == 6)) {
@@ -315,20 +315,20 @@ int main(int argc, const char ** argv)
       strcat(tempstring, ".leqmlog.txt");
       leqmlogfile = fopen(tempstring, "w");
       if (leqmlogfile == NULL) {
-	printf("Could not open file to write log leqm data!\n");	
+	printf("Could not open file to write log leqm data!\n");
       }
     }
-    
-      
+
+
   if (timing) {
 
   clock_gettime(CLOCK_MONOTONIC, &starttime);
   }
-  
 
 
 
-  
+
+
   // reading to a double or float buffer with sndfile take care of normalization
  /*
  static double  buffer[BUFFER_LEN]; // it seems this must be static. I don't know why
@@ -340,17 +340,17 @@ int main(int argc, const char ** argv)
    printf("Please fine tune the buffersize according to the sample rate\n");
    //close file
    // free memory
-   // write a function to do that 
+   // write a function to do that
    return 1;
  }
- 
+
   buffersizesamples = (sfinfo.samplerate*sfinfo.channels*buffersizems)/1000;
-  buffer = malloc(sizeof(double)*buffersizesamples);
+  buffer = (double *) malloc(sizeof(double)*buffersizesamples);
 
  samplingfreq = sfinfo.samplerate;
 
  if(leqm10) {
-   
+
    //if duration < 10 mm exit
 
    double featdursec = sfinfo.frames / sfinfo.samplerate;
@@ -358,14 +358,14 @@ int main(int argc, const char ** argv)
      printf("The audio file is too short to measure Leq(m10).\n");
      return 0;
    }
-   
+
    //how many short periods in overall duration
    int remainder = sfinfo.frames % (sfinfo.samplerate*buffersizems/1000);
-   if (remainder == 0)  numbershortperiods = sfinfo.frames/(sfinfo.samplerate*buffersizems/1000); 
+   if (remainder == 0)  numbershortperiods = sfinfo.frames/(sfinfo.samplerate*buffersizems/1000);
    else  numbershortperiods = sfinfo.frames/(sfinfo.samplerate*buffersizems/1000) + 1;
-  
+
    //allocate array
-   shorttermaveragedarray = malloc(sizeof(*shorttermaveragedarray)*numbershortperiods);
+   shorttermaveragedarray = (double *) malloc(sizeof(*shorttermaveragedarray)*numbershortperiods);
  }
 
 
@@ -375,16 +375,16 @@ int main(int argc, const char ** argv)
   // M Weighting
   double freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
   double freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
-  
+
   double * eqfreqresp_db;
-  eqfreqresp_db = malloc(sizeof(*eqfreqresp_db)*npoints);
+  eqfreqresp_db = (double *) malloc(sizeof(*eqfreqresp_db)*npoints);
 
   double * eqfreqsamples;
-  eqfreqsamples = malloc(sizeof(*eqfreqsamples)*npoints);
+  eqfreqsamples = (double *) malloc(sizeof(*eqfreqsamples)*npoints);
   double * eqfreqresp;
-  eqfreqresp = malloc(sizeof(*eqfreqresp)*npoints);
+  eqfreqresp = (double *) malloc(sizeof(*eqfreqresp)*npoints);
   double * ir;
-  ir = malloc(sizeof(*ir)*npoints*2);
+  ir = (double *) malloc(sizeof(*ir)*npoints*2);
 
 
 // And what to do for floating point sample coding?
@@ -410,22 +410,22 @@ int main(int argc, const char ** argv)
 
 
 
-  
+
    equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, npoints, samplingfreq, origpoints, bitdepth);
   convloglin(eqfreqresp_db, eqfreqresp, npoints);
 
     #ifdef DEBUG
     for (int i=0; i < npoints; i++) {
-      printf("%d\t%.2f\t%.2f\t%.6f\n", i, eqfreqsamples[i], eqfreqresp_db[i], eqfreqresp[i]);  
+      printf("%d\t%.2f\t%.2f\t%.6f\n", i, eqfreqsamples[i], eqfreqresp_db[i], eqfreqresp[i]);
     }
     #endif
-    
+
     inversefft2(eqfreqresp, ir, npoints);
 
 // read through the entire file
 
    struct Sum * totsum;
-    totsum = malloc(sizeof(struct Sum));
+    totsum = (Sum *) malloc(sizeof(struct Sum));
     totsum->csum = 0.0;
     totsum->sum = 0.0;
     totsum->nsamples = 0;
@@ -440,13 +440,13 @@ int main(int argc, const char ** argv)
  int worker_id = 0;
  pthread_t tid[numCPU];
  struct WorkerArgs ** WorkerArgsArray;
- WorkerArgsArray = malloc(sizeof(struct WorkerArgs *)*numCPU);
+ WorkerArgsArray = (WorkerArgs **) malloc(sizeof(struct WorkerArgs *)*numCPU);
  int staindex = 0; //shorttermarrayindex
 
 
  while((samples_read = sf_read_double(file, buffer, buffersizesamples)) > 0) {
 
-   WorkerArgsArray[worker_id]=malloc(sizeof(struct WorkerArgs));
+   WorkerArgsArray[worker_id] = (WorkerArgs *) malloc(sizeof(struct WorkerArgs));
    WorkerArgsArray[worker_id]->nsamples = samples_read;
    WorkerArgsArray[worker_id]->nch = sfinfo.channels;
    WorkerArgsArray[worker_id]->npoints=npoints;
@@ -463,9 +463,9 @@ int main(int argc, const char ** argv)
      WorkerArgsArray[worker_id]->leqm10flag = 0;
    }
 
-   WorkerArgsArray[worker_id]->argbuffer = malloc(sizeof(double)*buffersizesamples); 
+   WorkerArgsArray[worker_id]->argbuffer = (double *) malloc(sizeof(double)*buffersizesamples);
    memcpy(WorkerArgsArray[worker_id]->argbuffer, buffer, samples_read*sizeof(double));
-   
+
 
    pthread_attr_t attr;
    pthread_attr_init(&attr);
@@ -488,7 +488,7 @@ int main(int argc, const char ** argv)
        logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sfinfo.samplerate), totsum );
 	       } //endlog
    }
-   
+
 
 
     //end while worker_id
@@ -509,10 +509,10 @@ int main(int argc, const char ** argv)
        if (leqmlog) {
 	 meanoverduration(totsum); //update leq(m) until now and log it
        logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sfinfo.samplerate), totsum );
-	       } //endlog  
+	       } //endlog
 	}
  // mean of scalar sum over duration
- 
+
  meanoverduration(totsum);
  if (leqnw) {
  printf("Leq(nW): %.4f\n", totsum->rms); // Leq(no Weighting)
@@ -524,7 +524,7 @@ int main(int argc, const char ** argv)
    long stoptimenanoseconds;
    long executionnanoseconds;
    clock_gettime(CLOCK_MONOTONIC, &stoptime);
-   
+
    if (stoptime.tv_nsec < starttime.tv_nsec) {
      stoptimenanoseconds = 1000000000 + stoptime.tv_nsec;
    } else {
@@ -540,12 +540,12 @@ int main(int argc, const char ** argv)
    //Take the array with the short term accumulators
    double interval = 10.0;
    //create a rolling average according to rolling interval
-   int rollint; // in short 10*60 = 600 sec 600/0.850 
+   int rollint; // in short 10*60 = 600 sec 600/0.850
 
 
    //how many element of the array to consider for the rollint?
    //that is how many buffersizems in the interval - interval could be parameterized(?)
-   double tempint = 60.0 * interval / (((double) buffersizems) /1000.0); 
+   double tempint = 60.0 * interval / (((double) buffersizems) /1000.0);
    rollint = (int) tempint;
    //dispose of the rest
    if (tempint - ((double) rollint) > 0) {
@@ -560,7 +560,7 @@ int main(int argc, const char ** argv)
      //internal loop
      double averagedaccumulator = 0;
      for (int indexshort = 0; indexshort < rollint; indexshort++) {
-       
+
        accumulator += shorttermaveragedarray[indexshort+indexlong];
      } //end internal loop
      averagedaccumulator = accumulator/((double) rollint);
@@ -573,14 +573,14 @@ int main(int argc, const char ** argv)
    shorttermaveragedarray = NULL;
  }
 
- 
+
  if (leqmlog) {
 
    fclose(leqmlogfile);
  }
-   
+
  sf_close(file);
- 
+
  free(eqfreqsamples);
  eqfreqsamples = NULL;
   free(eqfreqresp_db);
@@ -593,7 +593,7 @@ int main(int argc, const char ** argv)
  channelconfcalvector = NULL;
  free(WorkerArgsArray);
  WorkerArgsArray = NULL;
- 
+
  free(totsum);
  totsum = NULL;
  free(buffer);
@@ -611,16 +611,16 @@ void * worker_function(void * argstruct) {
    double * csumandsquarebuffer;
   double * chsumaccumulator_norm;
   double * chsumaccumulator_conv;
-  
 
-  sumandsquarebuffer = malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-  
 
-  csumandsquarebuffer = malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
+  sumandsquarebuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
 
-  chsumaccumulator_norm = malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
 
-  chsumaccumulator_conv = malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
+  csumandsquarebuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
+
+  chsumaccumulator_norm = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
+
+  chsumaccumulator_conv = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
 
 
 
@@ -632,24 +632,24 @@ void * worker_function(void * argstruct) {
   }
 
 
-  
+
   for (int ch = 0; ch < thisWorkerArgs->nch; ch++) {
 
     double * normalizedbuffer;
     double * convolvedbuffer;
 
 
-    normalizedbuffer = malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
+    normalizedbuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
 
-    convolvedbuffer = malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-    
+    convolvedbuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
+
 
     for (int n=ch, m= 0; n < thisWorkerArgs->nsamples; n += thisWorkerArgs->nch, m++) {
      // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
       //so not normalized but calibrated
    normalizedbuffer[m] = thisWorkerArgs->argbuffer[n]*thisWorkerArgs->chconf[ch]; //this scale amplitude according to specified calibration
 
-   
+
  }
 
  //convolution
@@ -657,10 +657,10 @@ void * worker_function(void * argstruct) {
  //rectify, square und sum
  rectify(csumandsquarebuffer,convolvedbuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
  rectify(sumandsquarebuffer,normalizedbuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
- 
+
  accumulatech(chsumaccumulator_norm, sumandsquarebuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
  accumulatech(chsumaccumulator_conv, csumandsquarebuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
- 
+
 
  free(normalizedbuffer);
  normalizedbuffer= NULL;
@@ -682,7 +682,7 @@ void * worker_function(void * argstruct) {
   // this should be done under mutex conditions -> shared resources!
   sumsamples(thisWorkerArgs->ptrtotsum, chsumaccumulator_norm, chsumaccumulator_conv, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
   pthread_mutex_unlock(&mutex);
-  
+
 
   free(sumandsquarebuffer);
   sumandsquarebuffer=NULL;
@@ -717,18 +717,18 @@ int equalinterval( double * freqsamples, double  * freqresp, double * eqfreqsamp
     for (int ieq = 0, i = 0; ieq < points; ieq++) {
         freq = ieq*pass;
         eqfreqsamples[ieq] = freq;
-	
-        if ((freq == 0.0) || (freq < freqsamples[1])) { 
+
+        if ((freq == 0.0) || (freq < freqsamples[1])) {
 	  eqfreqresp[ieq] = freqresp[0];
             continue;
     } else {
-        
+
         if ((freq >= freqsamples[i]) && (freq < freqsamples[i+1])) {
 	  eqfreqresp[ieq] = ((freqresp[i+1] - freqresp[i])/(freqsamples[i+1] - freqsamples[i]))*(freq - freqsamples[i]) + freqresp[i];
         } else if (freq >=freqsamples[i+1]) {
             while(freq >= freqsamples[i+1]) {
                 i++;
-		if ((i + 1) >= origpoints) { 
+		if ((i + 1) >= origpoints) {
 		  break;
 		}
             }
@@ -761,7 +761,7 @@ int equalinterval2( double freqsamples[], double  freqresp_db[], double * eqfreq
     for (int ieq = 0, i = 0; ieq < points; ieq++) {
         freq = ieq*pass;
         eqfreqsamples[ieq] = freq;
-	
+
         if (freq == 0.0) {
 	  eqfreqresp[ieq] = dcatt;
 	} else if (freq < freqsamples[0]) { // this has a lot of influence on final Leq(M) value
@@ -769,13 +769,13 @@ int equalinterval2( double freqsamples[], double  freqresp_db[], double * eqfreq
 	  //eqfreqresp[ieq] = freqresp_db[0]; // Is this meaningful? Shouldn't I interpolate between 0 Hz and 31 Hz? Otherwise for DC I have -35.5 dB
             continue;
     } else {
-        
+
         if ((freq >= freqsamples[i]) && (freq < freqsamples[i+1])) {
 	  eqfreqresp[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq - freqsamples[i]) + freqresp_db[i];
         } else if (freq >=freqsamples[i+1]) {
             while(freq >= freqsamples[i+1]) {
                 i++;
-		if ((i + 1) >= origpoints) { 
+		if ((i + 1) >= origpoints) {
 		  break;
 		}
             }
@@ -835,8 +835,8 @@ int convolv_buff(double * sigin, double * sigout, double * impresp, int sigin_di
     sigout[i] = sum;
     sum=0.0;
     }
-  return 0; 
-  
+  return 0;
+
 }
 
 
@@ -844,7 +844,7 @@ void  inversefft2(double * eqfreqresp, double * ir, int npoints) {
   for (int n = 0; n < npoints; n++) {
     double parsum = 0.0;
     double partial = 0.0;
-    
+
     for (int m = 1; m <= npoints -1; m++) {
       partial = cos(2.0*M_PI*((double) m)*( ( ((double) n) - ( ((double) npoints) * 2.0 -1 ) / 2 ) / ( ((double) npoints) * 2.0) ));
       parsum = parsum + eqfreqresp[m]*partial;
@@ -860,17 +860,17 @@ void  inversefft2(double * eqfreqresp, double * ir, int npoints) {
     printf("%.4f\n", ir[npoints+n]);
     #endif
   }
-  
-  
+
+
 }
 
 // scale input according to required calibration
 // this could be different for certain digital cinema formats
 double inputcalib (double dbdiffch) {
-    
+
     double coeff = pow(10, dbdiffch/20);
     return coeff;
-    
+
 }
 
 //rectify, square and sum
@@ -878,8 +878,8 @@ int rectify(double * squared, double * inputsamples, int nsamples){
   for (int i = 0; i < nsamples; i++) {
     squared[i] = (double) powf(inputsamples[i], 2);
     }
-    return 0; 
-    
+    return 0;
+
 }
 
 int initbuffer(double * buffertoinit, int nsamples) {
@@ -904,7 +904,7 @@ int sumsamples(struct Sum * ts, double * inputsamples, double * cinputsamples, i
     ts->csum += cinputsamples[i];
   }
   return 0;
-  
+
 }
 
 int meanoverduration(struct Sum * oldsum) {
@@ -916,9 +916,9 @@ int meanoverduration(struct Sum * oldsum) {
      /*
 How the final offset is calculated without reference to a test tone:
 P0 is the SPL reference 20 uPa
-Reference SPL is RMS ! So 85 SPL over 20 uPa is 10^4.25 x 0.000020 = 0.355655882 Pa (RMS), 
+Reference SPL is RMS ! So 85 SPL over 20 uPa is 10^4.25 x 0.000020 = 0.355655882 Pa (RMS),
 but Peak value is 0.355655882 x sqr(2) = 0.502973372 that is 20 x log ( 0.502973372 / 0.000020) = 88.010299957
-To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957 
+To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957
    */
    /*But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
    */
@@ -929,7 +929,7 @@ double sumandshorttermavrg(double * channelaccumulator, int nsamples) {
   double stsum = 0.0;
   for (int i=0; i < nsamples; i++) {
     stsum += channelaccumulator[i];
-    
+
   }
   return stsum / (double) nsamples;
 }
@@ -939,7 +939,7 @@ void logleqm(FILE * filehandle, double featuretimesec, struct Sum * oldsum) {
   fprintf(filehandle, "%.4f", featuretimesec);
   fprintf(filehandle, "\t");
   fprintf(filehandle, "%.4f\n", oldsum->leqm);
-  
+
 
 }
 
