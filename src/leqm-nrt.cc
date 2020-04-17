@@ -621,35 +621,30 @@ void * worker_function(void * argstruct) {
 
   for (int ch = 0; ch < thisWorkerArgs->nch; ch++) {
 
-    double * normalizedbuffer;
-    double * convolvedbuffer;
-
-    normalizedbuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
-    convolvedbuffer = (double *) malloc(sizeof(double)*(thisWorkerArgs->nsamples / thisWorkerArgs->nch));
+    auto normalized_buffer = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
+    auto convolved_buffer = new double[thisWorkerArgs->nsamples / thisWorkerArgs->nch];
 
     for (int n=ch, m= 0; n < thisWorkerArgs->nsamples; n += thisWorkerArgs->nch, m++) {
-     // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
-      //so not normalized but calibrated
-   normalizedbuffer[m] = thisWorkerArgs->argbuffer[n]*thisWorkerArgs->chconf[ch]; //this scale amplitude according to specified calibration
-
-
- }
+	    // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
+	    //so not normalized but calibrated
+	    normalized_buffer[m] = thisWorkerArgs->argbuffer[n]*thisWorkerArgs->chconf[ch]; //this scale amplitude according to specified calibration
+    }
 
  //convolution
- convolv_buff(normalizedbuffer, convolvedbuffer, thisWorkerArgs->ir, thisWorkerArgs->nsamples / thisWorkerArgs->nch, thisWorkerArgs->npoints * 2);
+ convolv_buff(normalized_buffer, convolved_buffer, thisWorkerArgs->ir, thisWorkerArgs->nsamples / thisWorkerArgs->nch, thisWorkerArgs->npoints * 2);
  //rectify, square und sum
- rectify(c_sum_and_square_buffer,convolvedbuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
- rectify(sum_and_square_buffer,normalizedbuffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+ rectify(c_sum_and_square_buffer, convolved_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
+ rectify(sum_and_square_buffer, normalized_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
 
  accumulatech(ch_sum_accumulator_norm, sum_and_square_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
  accumulatech(ch_sum_accumulator_conv, c_sum_and_square_buffer, thisWorkerArgs->nsamples / thisWorkerArgs->nch);
 
 
- free(normalizedbuffer);
- normalizedbuffer= NULL;
+ delete[] normalized_buffer;
+ normalized_buffer = nullptr;
 
- free(convolvedbuffer);
- convolvedbuffer=NULL;
+ delete[] convolved_buffer;
+ convolved_buffer = nullptr;
 
  } // loop through channels
 
