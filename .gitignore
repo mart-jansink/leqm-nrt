@@ -1,0 +1,10 @@
+Makefile
+config.h
+config.log
+config.status
+src/.deps/
+src/Makefile
+src/leqm-nrt
+src/leqm-nrt.o
+stamp-h1
+
