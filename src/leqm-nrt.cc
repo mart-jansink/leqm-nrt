@@ -263,6 +263,7 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
+int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilename, double* channelconfcalvector, double* tempchcal, int leqmlog, FILE* leqmlogfile, int leqm10, FILE* leqm10logfile, struct timespec& starttime, int timing, double* shorttermaveragedarray, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
@@ -284,8 +285,7 @@ int main(int argc, const char ** argv)
 	int numCPU = sysinfo.dwNumberOfProcessors - 1;
 #endif
 
-	double * channelconfcalvector;
-	channelconfcalvector = NULL;
+	double * channelconfcalvector = nullptr;
 	printf("leqm-nrt  Copyright (C) 2011-2013, 2017-2018 Luca Trisciani\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the GPL v3 licence.\nProgram will use 1 + %d slave threads.\n", numCPU);
 	//SndfileHandle file;
 	SNDFILE *file;
@@ -299,8 +299,7 @@ int main(int argc, const char ** argv)
 	int buffer_size_samples;
 	double tempchcal[128];
 	int numcalread = 0;
-	double * shorttermaveragedarray;
-	shorttermaveragedarray = NULL;
+	double * shorttermaveragedarray = nullptr;
 	int numbershortperiods = 0;
 	int parameterstate = 0;
 	int leqnw = 0;
@@ -434,6 +433,12 @@ int main(int argc, const char ** argv)
 			break;
 		}
 	}
+
+	return calculate(numcalread, file, sfinfo, soundfilename, channelconfcalvector, tempchcal, leqmlog, leqmlogfile, leqm10, leqm10logfile, starttime, timing, shorttermaveragedarray, bitdepth, numbershortperiods, buffersizems, buffer_size_samples, numCPU, samplingfreq, npoints, origpoints, leqnw);
+}
+
+int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilename, double* channelconfcalvector, double* tempchcal, int leqmlog, FILE* leqmlogfile, int leqm10, FILE* leqm10logfile, struct timespec& starttime, int timing, double* shorttermaveragedarray, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
+{
 	// Open audio file
 
 	//postprocessing parameters
@@ -712,7 +717,6 @@ int main(int argc, const char ** argv)
 	totsum = NULL;
 	delete[] buffer;
 	buffer = nullptr;
-	return 0;
 }
 
 
