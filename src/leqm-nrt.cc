@@ -59,14 +59,41 @@
 //#define DEBUG
 
 
-struct Sum {
-  double csum; // convolved sum
-  double sum; // flat sum
-    int nsamples;
-  double cmean; //convolved mean
-    double mean;
-    double leqm;
-  double rms;
+class Sum
+{
+public:
+	Sum()
+	{
+		csum = 0.0;
+		sum = 0.0;
+		nsamples = 0;
+		cmean = 0.0;
+		mean = 0.0; // Do I write anything here?
+		leqm = 0.0;
+		rms = 0.0;
+	}
+
+	void sumsamples(double * inputsamples, double * cinputsamples, int nsamples_)
+	{
+		_mutex.lock();
+		nsamples += nsamples_;
+		for (auto i = 0; i < nsamples_; i++) {
+			sum  += inputsamples[i];
+			csum += cinputsamples[i];
+		}
+		_mutex.unlock();
+	}
+
+	double csum; // convolved sum
+	double sum; // flat sum
+	int nsamples;
+	double cmean; //convolved mean
+	double mean;
+	double leqm;
+	double rms;
+
+private:
+	std::mutex _mutex;
 };
 
 class Worker
@@ -105,16 +132,6 @@ public:
 
 
 private:
-	int sumsamples(struct Sum * ts, double * inputsamples, double * cinputsamples, int nsamples) const
-	{
-		ts->nsamples += nsamples;
-		for (int i=0; i < nsamples; i++) {
-			ts->sum  += inputsamples[i];
-			ts->csum += cinputsamples[i];
-		}
-		return 0;
-	}
-
 	double sumandshorttermavrg(double * channelaccumulator, int nsamples) const
 	{
 		double stsum = 0.0;
@@ -211,10 +228,7 @@ private:
 #endif
 		}
 
-		_mutex.lock();
-		// this should be done under mutex conditions -> shared resources!
-		sumsamples(_ptrtotsum, ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
-		_mutex.unlock();
+		_ptrtotsum->sumsamples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
 
 		delete[] sum_and_square_buffer;
 		delete[] c_sum_and_square_buffer;
@@ -227,17 +241,14 @@ private:
 	int _nch;
 	int _npoints;
 	double* _ir;
-	struct Sum* _ptrtotsum;
+	Sum* _ptrtotsum;
 	double* _chconf;
 	int _shorttermindex;
 	double* _shorttermarray;
 	int _leqm10flag;
 
 	std::thread _thread;
-	static std::mutex _mutex;
 };
-
-std::mutex Worker::_mutex;
 
 int equalinterval( double * freqsamples, double * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints);
 int equalinterval2( double freqsamples[], double * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
@@ -245,11 +256,11 @@ int convloglin(double * in, double * out, int points);
 double convlinlog_single(double in);
 double convloglin_single(double in);
 double inputcalib (double dbdiffch);
-int meanoverduration(struct Sum * oldsum);
+int meanoverduration(Sum * oldsum);
 void  inversefft1(double * eqfreqresp, double * ir, int npoints);
 void  inversefft2(double * eqfreqresp, double * ir, int npoints);
 void * worker_function(void * argfunc);
-void logleqm(FILE * filehandle, double featuretimesec, struct Sum * oldsum);
+void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
 
@@ -578,15 +589,7 @@ int main(int argc, const char ** argv)
 
 // read through the entire file
 
-   struct Sum * totsum;
-    totsum = (Sum *) malloc(sizeof(struct Sum));
-    totsum->csum = 0.0;
-    totsum->sum = 0.0;
-    totsum->nsamples = 0;
-    totsum->cmean = 0.0;
-    totsum->mean = 0.0; // Do I write anything here?
-    totsum->leqm = 0.0;
-    totsum->rms = 0.0;
+   auto totsum = new Sum();
     sf_count_t samples_read = 0;
 
  // Main loop through audio file
@@ -875,7 +878,7 @@ int initbuffer(double * buffertoinit, int nsamples) {
   return 0;
 }
 
-int meanoverduration(struct Sum * oldsum) {
+int meanoverduration(Sum * oldsum) {
   oldsum->mean = pow(oldsum->sum / ((double) oldsum->nsamples), 0.500);
    oldsum->cmean = pow(oldsum->csum / ((double) oldsum->nsamples), 0.500);
    oldsum->rms = 20*log10(oldsum->mean) + 108.010299957;
@@ -893,7 +896,7 @@ To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 +
 return 0;
 }
 
-void logleqm(FILE * filehandle, double featuretimesec, struct Sum * oldsum) {
+void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum) {
 
   fprintf(filehandle, "%.4f", featuretimesec);
   fprintf(filehandle, "\t");
