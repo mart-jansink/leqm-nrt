@@ -44,6 +44,8 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <thread>
+#include <mutex>
 
 // Version 0.0.18 (C) Luca Trisciani 2011-2013, 2017-2018
 // Tool from the DCP-Werkstatt Software Bundle
@@ -67,8 +69,8 @@ struct Sum {
   double rms;
 };
 
-struct WorkerArgs {
-	WorkerArgs(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* ptrtotsum, double* chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
+struct Worker {
+	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* ptrtotsum, double* chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
 		: _arg_buffer(new double[buffer_size_samples])
 		, _nsamples(nsamples)
 		, _nch(nch)
@@ -81,16 +83,141 @@ struct WorkerArgs {
 		, _leqm10flag(leqm10flag)
 	{
 		memcpy(_arg_buffer, buffer, nsamples * sizeof(double));
+		_thread = std::thread(&Worker::process, this);
 	}
 
-	WorkerArgs(WorkerArgs& other) = delete;
-	bool operator=(WorkerArgs&) = delete;
-	WorkerArgs(WorkerArgs&& other) = delete;
-	bool operator=(WorkerArgs&&) = delete;
+	Worker(Worker& other) = delete;
+	bool operator=(Worker&) = delete;
+	Worker(Worker&& other) = delete;
+	bool operator=(Worker&&) = delete;
 
-	~WorkerArgs()
+	~Worker()
 	{
+		try {
+			_thread.join();
+		} catch (...)
+		{
+		}
 		delete[] _arg_buffer;
+	}
+
+
+private:
+	int sumsamples(struct Sum * ts, double * inputsamples, double * cinputsamples, int nsamples) const
+	{
+		ts->nsamples += nsamples;
+		for (int i=0; i < nsamples; i++) {
+			ts->sum  += inputsamples[i];
+			ts->csum += cinputsamples[i];
+		}
+		return 0;
+	}
+
+	double sumandshorttermavrg(double * channelaccumulator, int nsamples) const
+	{
+		double stsum = 0.0;
+		for (int i=0; i < nsamples; i++) {
+			stsum += channelaccumulator[i];
+
+		}
+		return stsum / (double) nsamples;
+	}
+
+	int accumulatech(double * chaccumulator, double * inputchannel, int nsamples) const
+	{
+		for (int i = 0; i < nsamples; i++) {
+			chaccumulator[i] += inputchannel[i];
+		}
+		return 0;
+	}
+
+	//rectify, square and sum
+	int rectify(double * squared, double * inputsamples, int nsamples) const
+	{
+		for (int i = 0; i < nsamples; i++) {
+			squared[i] = (double) powf(inputsamples[i], 2);
+		}
+		return 0;
+
+	}
+
+	int convolv_buff(double * sigin, double * sigout, double * impresp, int sigin_dim, int impresp_dim) const
+	{
+		double sum = 0.0;
+		for (int i = 0; i < sigin_dim; i++) {
+
+			int m = i;
+			for (int l = impresp_dim - 1; l >=0; l--,m++) {
+				if (m >= sigin_dim) {
+					m -= sigin_dim;
+				}
+				sum += sigin[m]*impresp[l];
+			}
+			sigout[i] = sum;
+			sum=0.0;
+		}
+		return 0;
+	}
+
+	void process()
+	{
+		int const frames = _nsamples / _nch;
+
+		auto sum_and_square_buffer = new double[frames];
+		auto c_sum_and_square_buffer = new double[frames];
+		auto ch_sum_accumulator_norm = new double[frames];
+		auto ch_sum_accumulator_conv = new double[frames];
+
+		for (int i = 0; i < frames; i++) {
+			sum_and_square_buffer[i] = 0.0;
+			c_sum_and_square_buffer[i] = 0.0;
+			ch_sum_accumulator_norm[i] = 0.0;
+			ch_sum_accumulator_conv[i] = 0.0;
+		}
+
+		for (int ch = 0; ch < _nch; ch++) {
+
+			auto normalized_buffer = new double[frames];
+			auto convolved_buffer = new double[frames];
+
+			for (int n=ch, m= 0; n < _nsamples; n += _nch, m++) {
+				// use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
+				//so not normalized but calibrated
+				normalized_buffer[m] = _arg_buffer[n] * _chconf[ch]; //this scale amplitude according to specified calibration
+			}
+
+			//convolution
+			convolv_buff(normalized_buffer, convolved_buffer, _ir, frames, _npoints * 2);
+			//rectify, square und sum
+			rectify(c_sum_and_square_buffer, convolved_buffer, frames);
+			rectify(sum_and_square_buffer, normalized_buffer, frames);
+
+			accumulatech(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
+			accumulatech(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
+
+			delete[] normalized_buffer;
+			delete[] convolved_buffer;
+
+		} // loop through channels
+
+		//Create a function for this also a tag so that the worker know if he has to do this or not
+
+		if (_leqm10flag) {
+			_shorttermarray[_shorttermindex] = sumandshorttermavrg(ch_sum_accumulator_conv, frames);
+#ifdef DEBUG
+			printf("%d: %.6f\n", _shorttermindex, _shorttermarray[_shorttermindex]);
+#endif
+		}
+
+		_mutex.lock();
+		// this should be done under mutex conditions -> shared resources!
+		sumsamples(_ptrtotsum, ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
+		_mutex.unlock();
+
+		delete[] sum_and_square_buffer;
+		delete[] c_sum_and_square_buffer;
+		delete[] ch_sum_accumulator_norm;
+		delete[] ch_sum_accumulator_conv;
 	}
 
 	double* _arg_buffer;
@@ -103,28 +230,25 @@ struct WorkerArgs {
 	int _shorttermindex;
 	double* _shorttermarray;
 	int _leqm10flag;
+
+	std::thread _thread;
+	static std::mutex _mutex;
 };
+
+std::mutex Worker::_mutex;
 
 int equalinterval( double * freqsamples, double * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints);
 int equalinterval2( double freqsamples[], double * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
 int convloglin(double * in, double * out, int points);
 double convlinlog_single(double in);
 double convloglin_single(double in);
-int convolv_buff(double * sigin, double * sigout, double * impresp, int sigin_dim, int impresp_dim);
 double inputcalib (double dbdiffch);
-int rectify(double * squared, double * inputsamples, int nsamples);
-int accumulatech(double * chaccumulator, double * inputchannel, int nsamples);
-int sumsamples(struct Sum * ts, double * inputsamples, double * cinputsamples, int nsamples);
 int meanoverduration(struct Sum * oldsum);
 void  inversefft1(double * eqfreqresp, double * ir, int npoints);
 void  inversefft2(double * eqfreqresp, double * ir, int npoints);
 void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, struct Sum * oldsum);
-double sumandshorttermavrg(double * channelaccumulator, int nsamples);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
-
-
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 int main(int argc, const char ** argv)
@@ -466,33 +590,24 @@ int main(int argc, const char ** argv)
  // Main loop through audio file
 
  int worker_id = 0;
- pthread_t tid[numCPU];
- std::vector<std::shared_ptr<WorkerArgs>> worker_args;
+ std::vector<std::shared_ptr<Worker>> worker_args;
  int staindex = 0; //shorttermarrayindex
 
 
  while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
-	 worker_args.push_back(std::make_shared<WorkerArgs>(
+	 worker_args.push_back(std::make_shared<Worker>(
 				 buffer, buffer_size_samples, samples_read, sfinfo.channels, npoints, ir, totsum, channelconfcalvector, leqm10 ? staindex++ : 0, leqm10 ? shorttermaveragedarray : 0, leqm10 ? 1 : 0)
 				 );
-
-	 pthread_attr_t attr;
-	 pthread_attr_init(&attr);
-	 pthread_create(&tid[worker_id], &attr, worker_function, worker_args[worker_id].get());
-
 	 worker_id++;
+
 	 if (worker_id == numCPU) {
 		 worker_id = 0;
-		 //maybe here wait for all cores to output before going on
-		 for (int idxcpu = 0; idxcpu < numCPU; idxcpu++) {
-			 pthread_join(tid[idxcpu], NULL);
-		 }
+		 worker_args.clear();
 		 //simply log here your measurement it will be a multiple of your threads and your buffer
 		 if (leqmlog) {
 			 meanoverduration(totsum); //update leq(m) until now and log it
 			 logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sfinfo.samplerate), totsum );
 		 } //endlog
-		 worker_args.clear();
 	 }
 
 
@@ -504,7 +619,6 @@ int main(int argc, const char ** argv)
  //but I need to dispose of thread id.
  if (worker_id != 0) { // worker_id = 0 means the number of samples was divisible through the number of cpus
    for (int idxcpu = 0; idxcpu < worker_id; idxcpu++) { //worker_id is at this point one unit more than threads launched
-     pthread_join(tid[idxcpu], NULL);
      worker_args.clear();
    }
         //also log here for a last value
@@ -603,86 +717,6 @@ int main(int argc, const char ** argv)
 
 
 
-void * worker_function(void * argstruct) {
-
-  struct WorkerArgs * thisWorkerArgs = (struct WorkerArgs *) argstruct;
-
-  int const frames = thisWorkerArgs->_nsamples / thisWorkerArgs->_nch;
-
-  auto sum_and_square_buffer = new double[frames];
-  auto c_sum_and_square_buffer = new double[frames];
-  auto ch_sum_accumulator_norm = new double[frames];
-  auto ch_sum_accumulator_conv = new double[frames];
-
-  for (int i = 0; i < frames; i++) {
-    sum_and_square_buffer[i] = 0.0;
-    c_sum_and_square_buffer[i] = 0.0;
-    ch_sum_accumulator_norm[i] = 0.0;
-    ch_sum_accumulator_conv[i] = 0.0;
-  }
-
-  for (int ch = 0; ch < thisWorkerArgs->_nch; ch++) {
-
-    auto normalized_buffer = new double[frames];
-    auto convolved_buffer = new double[frames];
-
-    for (int n=ch, m= 0; n < thisWorkerArgs->_nsamples; n += thisWorkerArgs->_nch, m++) {
-	    // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
-	    //so not normalized but calibrated
-	    normalized_buffer[m] = thisWorkerArgs->_arg_buffer[n] * thisWorkerArgs->_chconf[ch]; //this scale amplitude according to specified calibration
-    }
-
- //convolution
- convolv_buff(normalized_buffer, convolved_buffer, thisWorkerArgs->_ir, frames, thisWorkerArgs->_npoints * 2);
- //rectify, square und sum
- rectify(c_sum_and_square_buffer, convolved_buffer, frames);
- rectify(sum_and_square_buffer, normalized_buffer, frames);
-
- accumulatech(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
- accumulatech(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
-
-
- delete[] normalized_buffer;
- normalized_buffer = nullptr;
-
- delete[] convolved_buffer;
- convolved_buffer = nullptr;
-
- } // loop through channels
-
-    //Create a function for this also a tag so that the worker know if he has to do this or not
-
-  if (thisWorkerArgs->_leqm10flag) {
-    thisWorkerArgs->_shorttermarray[thisWorkerArgs->_shorttermindex] = sumandshorttermavrg(ch_sum_accumulator_conv, frames);
-    #ifdef DEBUG
-    printf("%d: %.6f\n", thisWorkerArgs->_shorttermindex, thisWorkerArgs->_shorttermarray[thisWorkerArgs->_shorttermindex]);
-    #endif
-  }
-  pthread_mutex_lock(&mutex);
-  // this should be done under mutex conditions -> shared resources!
-  sumsamples(thisWorkerArgs->_ptrtotsum, ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
-  pthread_mutex_unlock(&mutex);
-
-
-  delete[] sum_and_square_buffer;
-  sum_and_square_buffer = nullptr;
-
-  delete[] c_sum_and_square_buffer;
-  c_sum_and_square_buffer = nullptr;
-
-  delete[] ch_sum_accumulator_norm;
-  ch_sum_accumulator_conv = nullptr;
-
-  delete[] ch_sum_accumulator_conv;
-  ch_sum_accumulator_conv = nullptr;
-
-  // the memory pointed to by this pointer is freed in main
-  // it is the same memory for all worker
-  // but it is necessary to set pointer to NULL otherwise free will not work later (really?)
-  thisWorkerArgs->_chconf = NULL;
- pthread_exit(0);
-
-}
 
 
 //to get impulse response frequency response at equally spaced intervals is needed
@@ -797,26 +831,6 @@ double convloglin_single(double in) {
 
 // convolution
 
-int convolv_buff(double * sigin, double * sigout, double * impresp, int sigin_dim, int impresp_dim) {
-
-
-  double  sum = 0.0;
-  for (int i = 0; i < sigin_dim; i++) {
-
-    int m = i;
-    for (int l = impresp_dim - 1; l >=0; l--,m++) {
-      if (m >= sigin_dim) {
-	m -= sigin_dim;
-      }
-      sum += sigin[m]*impresp[l];
-    }
-    sigout[i] = sum;
-    sum=0.0;
-    }
-  return 0;
-
-}
-
 
 void  inversefft2(double * eqfreqresp, double * ir, int npoints) {
   for (int n = 0; n < npoints; n++) {
@@ -851,38 +865,12 @@ double inputcalib (double dbdiffch) {
 
 }
 
-//rectify, square and sum
-int rectify(double * squared, double * inputsamples, int nsamples){
-  for (int i = 0; i < nsamples; i++) {
-    squared[i] = (double) powf(inputsamples[i], 2);
-    }
-    return 0;
-
-}
-
 int initbuffer(double * buffertoinit, int nsamples) {
   for (int i = 0; i < nsamples; i++) {
     buffertoinit[i] = 0.0;
 
   }
   return 0;
-}
-
-int accumulatech(double * chaccumulator, double * inputchannel, int nsamples) {
-  for (int i = 0; i < nsamples; i++) {
-    chaccumulator[i] += inputchannel[i];
-  }
-  return 0;
-}
-
-int sumsamples(struct Sum * ts, double * inputsamples, double * cinputsamples, int nsamples) {
-  ts->nsamples += nsamples;
-  for (int i=0; i < nsamples; i++) {
-    ts->sum  += inputsamples[i];
-    ts->csum += cinputsamples[i];
-  }
-  return 0;
-
 }
 
 int meanoverduration(struct Sum * oldsum) {
@@ -901,15 +889,6 @@ To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 +
    /*But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
    */
 return 0;
-}
-
-double sumandshorttermavrg(double * channelaccumulator, int nsamples) {
-  double stsum = 0.0;
-  for (int i=0; i < nsamples; i++) {
-    stsum += channelaccumulator[i];
-
-  }
-  return stsum / (double) nsamples;
 }
 
 void logleqm(FILE * filehandle, double featuretimesec, struct Sum * oldsum) {
