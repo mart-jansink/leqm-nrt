@@ -1,0 +1,9 @@
+prefix=@prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libleqm-nrt
+Description: LEQ calculation library
+Version: @version@
+Libs: @libs@
+Cflags: -I${includedir}

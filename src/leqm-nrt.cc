@@ -21,7 +21,7 @@
 
  */
 
-
+#include "leqm-nrt.h"
 
 #include <stdio.h>
 #include <math.h>
@@ -33,13 +33,6 @@
 #include <time.h>
 #include <ctype.h>
 #include <iso646.h>
-
-#ifdef _WIN32
-#include <windows.h>
-#elif __APPLE__
-#include <sys/param.h>
-#include <sys/sysctl.h
-#endif
 
 #include <vector>
 #include <memory>
@@ -261,189 +254,6 @@ void  inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir
 void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-
-struct Result
-{
-	Result()
-		: status(0)
-	{}
-
-	Result(int status_)
-		: status(status_)
-	{}
-
-	/** 0 on success, or
-	 *
-	 * -100: Either channel_corrections contained a different number of
-	 *  calibrations than; number of channels in the file or it was empty and  the
-	 *  program cannot infer one from the number of channels. Please specify a
-	 *  values in channel_corrections.
-	 *
-	 * -101: Failed to open the sound file.
-	 *
-	 * -102: buffer_size_ms is not an integer number of samples at the sound file's rate.
-	 */
-	int status;
-
-	double leq_m;
-	double leq_nw;
-};
-
-
-Result calculate_file(
-	std::string sound_filename,
-	std::vector<double> channel_corrections,
-	int buffer_size_ms,
-	int number_of_filter_interpolation_points,
-	int num_cpu,
-	bool enable_leqm_log,
-	bool enable_leqm10_log,
-	bool measure_timing
-	);
-
-
-Result calculate_function(
-	std::function<int64_t (double*, int64_t)> get_audio_data,
-	int channels,
-	int sample_rate,
-	int frames,
-	int bits_per_sample,
-	std::string log_prefix,
-	std::vector<double> channel_corrections,
-	int buffer_size_ms,
-	int number_of_filter_interpolation_points,
-	int num_cpu,
-	bool enable_leqm_log,
-	bool enable_leqm10_log,
-	bool measure_timing
-	);
-
-
-int main(int argc, const char ** argv)
-{
-	int number_of_filter_interpolation_points = 64; // This value is low for precision. Calibration is done with 32768 point.
-	bool measure_timing = false;
-	bool enable_leqm10_log = false;
-	bool enable_leqm_log = false;
-	int num_cpu = std::thread::hardware_concurrency() - 1;
-
-	printf("leqm-nrt  Copyright (C) 2011-2013, 2017-2018 Luca Trisciani\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the GPL v3 licence.\nProgram will use 1 + %d slave threads.\n", num_cpu);
-	int buffer_size_ms = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
-	std::vector<double> channel_corrections;
-	int parameterstate = 0;
-	bool display_leqnw = false;
-	std::string sound_filename;
-
-	if (argc == 1)
-	{ const char helptext[] = "Order of parameters is free.\nPossible parameters are:\n-convpoints <integer number> \tNumber of interpolation points for the filter. Default 64\n-numcpus <integer number> \tNumber of slave threads to speed up operation.\n-timing \t\t\tFor benchmarking speed.\n-leqnw\t Print out Leq without M Weighting\n-chconfcal <db correction> <db correction> <etc. so many times as channels>\n-logleqm10\n-logleqm\n-buffersize <milliseconds>\n";
-		printf(helptext);
-		printf("Please indicate a sound file to be processed.\n");
-		return 0;
-	}
-
-	for (int in = 1; in < argc;) {
-
-		if (!(strncmp(argv[in], "-", 1) == 0)) {
-			sound_filename = argv[in];
-			in++;
-		}
-
-		if (strcmp(argv[in], "-chconfcal") == 0) {
-			/* as the order of parameter is free I have to postpone
-			   the check for consistency with the number of channels.
-			   So first create a temporary array, whose number of element will be checked after
-			   the parsing of the command line parameters is finished.
-			   The calibration will be expressed in dB on the command line and converted to multiplier
-			   here so that it can be stored as a factor in the channelconfcalvector.
-			   */
-
-			in++;
-			for (;;)  {
-				if (in < argc) {
-					if (!(strncmp(argv[in], "-", 1) == 0) || isdigit(argv[in][1])) {
-						channel_corrections.push_back(atof(argv[in++]));
-					} else break;
-				} else break;
-
-			} //for
-			continue;
-		}
-
-		if (strcmp(argv[in], "-convpoints") == 0) {
-			number_of_filter_interpolation_points = atoi(argv[in + 1]);
-			in+=2;
-			printf("Convolution points sets to %d.\n", number_of_filter_interpolation_points);
-			continue;
-
-		}
-
-
-		if (strcmp(argv[in], "-version") == 0) {
-			in++;
-			printf("leqm-nrt version 0.18\n");
-			continue;
-
-		}
-		if (strcmp(argv[in], "-numcpus") == 0) {
-			num_cpu= atoi(argv[in + 1]);
-			in+=2;
-			printf("Number of threads manually set to %d. Default is number of cores in the system minus one.\n", num_cpu);
-			continue;
-
-		}
-		if (strcmp(argv[in], "-timing") == 0) {
-			measure_timing = true;
-			in++;
-			printf("Execution time will be measured.\n");
-			continue;
-
-		}
-
-		if (strcmp(argv[in], "-logleqm10") == 0) {
-			enable_leqm10_log = 1;
-			in++;
-			printf("Leq(M)10 data will be logged to the file leqm10.txt\n");
-			continue;
-
-		}
-		if (strcmp(argv[in], "-logleqm") == 0) {
-			enable_leqm_log = true;
-			in++;
-			printf("Leq(M) data will be logged to the file leqmlog.txt\n");
-			continue;
-
-		}
-
-		if (strcmp(argv[in], "-leqnw") == 0) {
-			display_leqnw = true;
-			in++;
-			printf("Leq(nW) - unweighted -  will be outputted.\n");
-			continue;
-
-		}
-
-		if (strcmp(argv[in], "-buffersize") == 0) {
-			buffer_size_ms = atoi(argv[in + 1]);
-			in+=2;
-			printf("Buffersize will be set to %d milliseconds.\n", buffer_size_ms);
-			continue;
-
-		}
-
-		if (parameterstate==0) {
-			break;
-		}
-	}
-
-	auto result = calculate_file(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, num_cpu, enable_leqm_log, enable_leqm10_log, measure_timing);
-
-	if (display_leqnw) {
-		printf("Leq(nW): %.4f\n", result.leq_nw); // Leq(no Weighting)
-	}
-	printf("Leq(M): %.4f\n", result.leq_m);
-
-	return result.status;
-}
 
 Result calculate_file(
 	std::string sound_filename,
