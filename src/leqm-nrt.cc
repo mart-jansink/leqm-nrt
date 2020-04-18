@@ -250,13 +250,13 @@ private:
 	std::thread _thread;
 };
 
-int equalinterval2(double const freqsamples[], double const * freqresp, std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
-int convloglin(std::vector<double> const& in, std::vector<double>& out, int points);
+
+void equalinterval2(double const freqsamples[], double const * freqresp, std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
+void convloglin(std::vector<double> const& in, std::vector<double>& out, int points);
 double convlinlog_single(double in);
 double convloglin_single(double in);
 double inputcalib (double dbdiffch);
 void  inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints);
-void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
@@ -294,7 +294,7 @@ Result calculate(
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
-	int numCPU,
+	int num_cpu,
 	bool enable_leqm_log,
 	bool enable_leqm10_log,
 	bool measure_timing
@@ -307,15 +307,9 @@ int main(int argc, const char ** argv)
 	bool measure_timing = false;
 	bool enable_leqm10_log = false;
 	bool enable_leqm_log = false;
-#if defined __unix__ || defined  __APPLE__
-	int numCPU = sysconf(_SC_NPROCESSORS_ONLN) - 1;
-#elif defined _WIN64 || defined _WIN32
-	SYSTEM_INFO sysinfo;
-	GetSystemInfo(&sysinfo);
-	int numCPU = sysinfo.dwNumberOfProcessors - 1;
-#endif
+	int num_cpu = std::thread::hardware_concurrency() - 1;
 
-	printf("leqm-nrt  Copyright (C) 2011-2013, 2017-2018 Luca Trisciani\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the GPL v3 licence.\nProgram will use 1 + %d slave threads.\n", numCPU);
+	printf("leqm-nrt  Copyright (C) 2011-2013, 2017-2018 Luca Trisciani\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the GPL v3 licence.\nProgram will use 1 + %d slave threads.\n", num_cpu);
 	int buffer_size_ms = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
 	std::vector<double> channel_corrections;
 	int parameterstate = 0;
@@ -373,9 +367,9 @@ int main(int argc, const char ** argv)
 
 		}
 		if (strcmp(argv[in], "-numcpus") == 0) {
-			numCPU= atoi(argv[in + 1]);
+			num_cpu= atoi(argv[in + 1]);
 			in+=2;
-			printf("Number of threads manually set to %d. Default is number of cores in the system minus one.\n", numCPU);
+			printf("Number of threads manually set to %d. Default is number of cores in the system minus one.\n", num_cpu);
 			continue;
 
 		}
@@ -423,7 +417,7 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	auto result = calculate(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, numCPU, enable_leqm_log, enable_leqm10_log, measure_timing);
+	auto result = calculate(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, num_cpu, enable_leqm_log, enable_leqm10_log, measure_timing);
 
 	if (display_leqnw) {
 		printf("Leq(nW): %.4f\n", result.leq_nw); // Leq(no Weighting)
@@ -438,7 +432,7 @@ Result calculate(
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
-	int numCPU,
+	int num_cpu,
 	bool enable_leqm_log,
 	bool enable_leqm10_log,
 	bool measure_timing
@@ -594,7 +588,7 @@ Result calculate(
 
 		worker_id++;
 
-		if (worker_id == numCPU) {
+		if (worker_id == num_cpu) {
 			worker_id = 0;
 			worker_args.clear();
 			//simply log here your measurement it will be a multiple of your threads and your buffer
@@ -684,7 +678,7 @@ Result calculate(
 //the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
 //it is also different for the way it interpolates between DC and 31 Hz
 // Pay attention that also arguments to the functions are changed
-int equalinterval2(double const freqsamples[], double const freqresp_db[], std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
+void equalinterval2(double const freqsamples[], double const freqresp_db[], std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
 	double freq;
 
 
@@ -721,16 +715,13 @@ int equalinterval2(double const freqsamples[], double const freqresp_db[], std::
 			}
 		}
 	}
-	return 0;
 }
 
 
-int convloglin(std::vector<double> const& in, std::vector<double>& out, int points) {
+void convloglin(std::vector<double> const& in, std::vector<double>& out, int points) {
 	for (int i = 0; i < points; i++) {
 		out[i] = powf(10, (in[i]/20.0));
 	}
-
-	return 0;
 }
 
 
@@ -766,8 +757,6 @@ void inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir,
 		printf("%.4f\n", ir[npoints+n]);
 #endif
 	}
-
-
 }
 
 // scale input according to required calibration
@@ -782,8 +771,6 @@ void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum) {
 	fprintf(filehandle, "%.4f", featuretimesec);
 	fprintf(filehandle, "\t");
 	fprintf(filehandle, "%.4f\n", oldsum.leqm());
-
-
 }
 
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage) {
@@ -791,5 +778,4 @@ void logleqm10(FILE * filehandle, double featuretimesec, double longaverage) {
 	fprintf(filehandle, "%.4f", featuretimesec);
 	fprintf(filehandle, "\t");
 	fprintf(filehandle, "%.4f\n", leqm10);
-
 }
