@@ -250,7 +250,6 @@ private:
 	std::thread _thread;
 };
 
-int equalinterval(double const * freqsamples, double const * freqresp, std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints);
 int equalinterval2(double const freqsamples[], double const * freqresp, std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
 int convloglin(std::vector<double> const& in, std::vector<double>& out, int points);
 double convlinlog_single(double in);
@@ -680,49 +679,6 @@ Result calculate(
 
 	return result;
 }
-
-
-
-
-
-	//to get impulse response frequency response at equally spaced intervals is needed
-
-	int equalinterval(double const * freqsamples, double const * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints) {
-		double freq;
-		// int findex = 0;
-		// int rindex = 0;
-		double pass = ((double) (samplingfreq >> 1)) / ((double) points);
-		for (int ieq = 0, i = 0; ieq < points; ieq++) {
-			freq = ieq*pass;
-			eqfreqsamples[ieq] = freq;
-
-			if ((freq == 0.0) || (freq < freqsamples[1])) {
-				eqfreqresp[ieq] = freqresp[0];
-				continue;
-			} else {
-
-				if ((freq >= freqsamples[i]) && (freq < freqsamples[i+1])) {
-					eqfreqresp[ieq] = ((freqresp[i+1] - freqresp[i])/(freqsamples[i+1] - freqsamples[i]))*(freq - freqsamples[i]) + freqresp[i];
-				} else if (freq >=freqsamples[i+1]) {
-					while(freq >= freqsamples[i+1]) {
-						i++;
-						if ((i + 1) >= origpoints) {
-							break;
-						}
-					}
-					if ((i+1) < origpoints) {
-						eqfreqresp[ieq] = ((freqresp[i+1] - freqresp[i])/(freqsamples[i+1] - freqsamples[i]))*(freq- freqsamples[i]) + freqresp[i];
-					} else {
-						eqfreqresp[ieq] = ((1 - freqresp[i])/(((double) (samplingfreq >> 1)) - freqsamples[i]))*(freq- freqsamples[i]) + freqresp[i];
-					}
-				}
-			}
-		}
-		return 0;
-	}
-
-
-
 
 
 	//the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
