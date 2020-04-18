@@ -263,7 +263,7 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw);
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
@@ -285,7 +285,6 @@ int main(int argc, const char ** argv)
 	//SndfileHandle file;
 	int buffersizems = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
 	std::vector<double> channel_corrections;
-	int numbershortperiods = 0;
 	int parameterstate = 0;
 	int leqnw = 0;
 	std::string sound_filename;
@@ -391,10 +390,10 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, measure_timing, numbershortperiods, buffersizems, numCPU, npoints, origpoints, leqnw);
+	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, measure_timing, buffersizems, numCPU, npoints, origpoints, leqnw);
 }
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw)
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
@@ -464,6 +463,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 
 	int samplingfreq = sf_info.samplerate;
 
+	int numbershortperiods = 0;
 	if(enable_leqm10_log) {
 
 		//if duration < 10 mm exit
