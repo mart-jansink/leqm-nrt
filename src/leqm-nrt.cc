@@ -263,7 +263,7 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilename, double* channelconfcalvector, double* tempchcal, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
+int calculate(int numcalread, std::string sound_filename, double* tempchcal, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
@@ -284,12 +284,8 @@ int main(int argc, const char ** argv)
 	int numCPU = sysinfo.dwNumberOfProcessors - 1;
 #endif
 
-	double * channelconfcalvector = nullptr;
 	printf("leqm-nrt  Copyright (C) 2011-2013, 2017-2018 Luca Trisciani\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the GPL v3 licence.\nProgram will use 1 + %d slave threads.\n", numCPU);
 	//SndfileHandle file;
-	SNDFILE *file;
-	file=NULL;
-	SF_INFO sfinfo;
 	int buffersizems = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
 	int buffer_size_samples;
 	double tempchcal[128];
@@ -297,12 +293,10 @@ int main(int argc, const char ** argv)
 	int numbershortperiods = 0;
 	int parameterstate = 0;
 	int leqnw = 0;
+	std::string sound_filename;
 
 	char soundfilename[1024];
 	// This is a requirement of sndfile library, do not forget it.
-
-	memset(&sfinfo, 0, sizeof(sfinfo));
-
 
 	if (argc == 1)
 	{ const char helptext[] = "Order of parameters is free.\nPossible parameters are:\n-convpoints <integer number> \tNumber of interpolation points for the filter. Default 64\n-numcpus <integer number> \tNumber of slave threads to speed up operation.\n-timing \t\t\tFor benchmarking speed.\n-leqnw\t Print out Leq without M Weighting\n-chconfcal <db correction> <db correction> <etc. so many times as channels>\n-logleqm10\n-logleqm\n-buffersize <milliseconds>\n";
@@ -315,30 +309,9 @@ int main(int argc, const char ** argv)
 	for (int in = 1; in < argc;) {
 
 		if (!(strncmp(argv[in], "-", 1) == 0)) {
-			if (fileopenstate == 0) {
-				if(! (file = sf_open(argv[in], SFM_READ, &sfinfo))) {
-					printf("Error while opening audio file, could not open  %s\n.", argv[in]);
-					puts(sf_strerror(NULL));
-					return 1;
-				}
-
-				strcpy(soundfilename, argv[in]);
-				fileopenstate = 1;
-				printf("Opened file: %s\n", argv[in]);
-				printf("Sample rate: %d\n", sfinfo.samplerate);
-				printf("Channels: %d\n", sfinfo.channels);
-				printf("Format: %d\n", sfinfo.format);
-				printf("Frames: %d\n", (int) sfinfo.frames);
-				channelconfcalvector = (double *) malloc(sizeof(double) * sfinfo.channels);
-				in++;
-				continue;
-			} else {
-				free(channelconfcalvector);
-				channelconfcalvector = NULL;
-				return 0;
-			}
+			sound_filename = argv[in];
+			in++;
 		}
-
 
 		if (strcmp(argv[in], "-chconfcal") == 0) {
 			/* as the order of parameter is free I have to postpone
@@ -428,27 +401,37 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(numcalread, file, sfinfo, soundfilename, channelconfcalvector, tempchcal, leqmlog, leqm10, timing, bitdepth, numbershortperiods, buffersizems, buffer_size_samples, numCPU, samplingfreq, npoints, origpoints, leqnw);
+	return calculate(numcalread, sound_filename, tempchcal, leqmlog, leqm10, timing, bitdepth, numbershortperiods, buffersizems, buffer_size_samples, numCPU, samplingfreq, npoints, origpoints, leqnw);
 }
 
-int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilename, double* channelconfcalvector, double* tempchcal, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
+int calculate(int numcalread, std::string sound_filename, double* tempchcal, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
 	struct timespec starttime;
 	double * shorttermaveragedarray = nullptr;
-	// Open audio file
+
+	SF_INFO sf_info;
+	sf_info.format = 0;
+	SNDFILE* file = sf_open(sound_filename.c_str(), SFM_READ, &sf_info);
+	if (!file) {
+		printf("Error while opening audio file, could not open %s\n.", sound_filename.c_str());
+		puts(sf_strerror(NULL));
+		return 1;
+	}
+
+	double* channelconfcalvector = new double[sf_info.channels];
 
 	//postprocessing parameters
-	if (numcalread == sfinfo.channels) {
-		for (int cind = 0; cind < sfinfo.channels; cind++) {
+	if (numcalread == sf_info.channels) {
+		for (int cind = 0; cind < sf_info.channels; cind++) {
 			channelconfcalvector[cind] = convloglin_single(tempchcal[cind]);
 
 		}
 	}
-	else if ((numcalread == 0) && (sfinfo.channels == 6)) {
+	else if ((numcalread == 0) && (sf_info.channels == 6)) {
 		double conf51[6] = {0, 0, 0, 0, -3, -3};
-		for (int cind = 0; cind < sfinfo.channels; cind++) {
+		for (int cind = 0; cind < sf_info.channels; cind++) {
 			channelconfcalvector[cind] = convloglin_single(conf51[cind]);
 		}
 
@@ -456,33 +439,22 @@ int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilenam
 
 		printf("Either you specified a different number of calibration than number of channels in the file or you do not indicate any calibration and the program cannot infer one from the number of channels. Please specify a channel calibration on the command line.\n");
 
-		free(channelconfcalvector);
-		channelconfcalvector = NULL;
+		delete[] channelconfcalvector;
 		return 0;
 	}
 
-
-
-
 	if (leqm10) {
-		char tempstring[1536];
-		strcpy(tempstring, soundfilename);
-		strcat(tempstring, ".leqm10.txt");
-		leqm10logfile = fopen(tempstring, "w");
-		if (leqm10logfile == NULL) {
+		std::string log_filename = sound_filename + ".leqm10.txt";
+		leqm10logfile = fopen(log_filename.c_str(), "w");
+		if (!leqm10logfile) {
 			printf("Could not open file to write log leqm10 data!\n");
 		}
 	}
 
-
-
-
 	if (leqmlog) {
-		char tempstring[1536];
-		strcpy(tempstring, soundfilename);
-		strcat(tempstring, ".leqmlog.txt");
-		leqmlogfile = fopen(tempstring, "w");
-		if (leqmlogfile == NULL) {
+		std::string log_filename = sound_filename + ".leqmlog.txt";
+		leqmlogfile = fopen(log_filename.c_str(), "w");
+		if (!leqmlogfile) {
 			printf("Could not open file to write log leqm data!\n");
 		}
 	}
@@ -498,8 +470,8 @@ int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilenam
    	*/
 	double * buffer;
 	// buffer = new double [BUFFER_LEN];
-	//buffer_size_samples = (sfinfo.samplerate*sfinfo.channels*buffersizems)/1000;
-	if ((sfinfo.samplerate*buffersizems)%1000) {
+	//buffer_size_samples = (sf_info.samplerate*sf_info.channels*buffersizems)/1000;
+	if ((sf_info.samplerate*buffersizems)%1000) {
 		printf("Please fine tune the buffersize according to the sample rate\n");
 		//close file
 		// free memory
@@ -507,25 +479,25 @@ int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilenam
 		return 1;
 	}
 
-	buffer_size_samples = (sfinfo.samplerate*sfinfo.channels*buffersizems)/1000;
+	buffer_size_samples = (sf_info.samplerate*sf_info.channels*buffersizems)/1000;
 	buffer = new double[buffer_size_samples];
 
-	samplingfreq = sfinfo.samplerate;
+	samplingfreq = sf_info.samplerate;
 
 	if(leqm10) {
 
 		//if duration < 10 mm exit
 
-		double featdursec = sfinfo.frames / sfinfo.samplerate;
+		double featdursec = sf_info.frames / sf_info.samplerate;
 		if ((featdursec/60.0) < 10.0) {
 			printf("The audio file is too short to measure Leq(m10).\n");
 			return 0;
 		}
 
 		//how many short periods in overall duration
-		int remainder = sfinfo.frames % (sfinfo.samplerate*buffersizems/1000);
-		if (remainder == 0)  numbershortperiods = sfinfo.frames/(sfinfo.samplerate*buffersizems/1000);
-		else  numbershortperiods = sfinfo.frames/(sfinfo.samplerate*buffersizems/1000) + 1;
+		int remainder = sf_info.frames % (sf_info.samplerate*buffersizems/1000);
+		if (remainder == 0)  numbershortperiods = sf_info.frames/(sf_info.samplerate*buffersizems/1000);
+		else  numbershortperiods = sf_info.frames/(sf_info.samplerate*buffersizems/1000) + 1;
 
 		//allocate array
 		shorttermaveragedarray = (double *) malloc(sizeof(*shorttermaveragedarray)*numbershortperiods);
@@ -552,7 +524,7 @@ int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilenam
 
 	// And what to do for floating point sample coding?
 
-	switch(sfinfo.format & SF_FORMAT_SUBMASK) {
+	switch(sf_info.format & SF_FORMAT_SUBMASK) {
 		// all signed bitdepth
 		case 0x0001:
 			bitdepth = 8;
@@ -599,7 +571,7 @@ int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilenam
 
 	while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
 		worker_args.push_back(std::make_shared<Worker>(
-					buffer, buffer_size_samples, samples_read, sfinfo.channels, npoints, ir, totsum, channelconfcalvector, leqm10 ? staindex++ : 0, leqm10 ? shorttermaveragedarray : 0, leqm10 ? 1 : 0)
+					buffer, buffer_size_samples, samples_read, sf_info.channels, npoints, ir, totsum, channelconfcalvector, leqm10 ? staindex++ : 0, leqm10 ? shorttermaveragedarray : 0, leqm10 ? 1 : 0)
 				);
 		worker_id++;
 
@@ -609,7 +581,7 @@ int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilenam
 			//simply log here your measurement it will be a multiple of your threads and your buffer
 			if (leqmlog) {
 				meanoverduration(totsum); //update leq(m) until now and log it
-				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sfinfo.samplerate), totsum );
+				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 			} //endlog
 		}
 
@@ -627,7 +599,7 @@ int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilenam
 		//also log here for a last value
 		if (leqmlog) {
 			meanoverduration(totsum); //update leq(m) until now and log it
-			logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sfinfo.samplerate), totsum );
+			logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 		} //endlog
 	}
 	// mean of scalar sum over duration

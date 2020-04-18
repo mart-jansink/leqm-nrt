@@ -3,9 +3,4 @@ This program comes with ABSOLUTELY NO WARRANTY.
 This is free software, and you are welcome to redistribute it
 under the GPL v3 licence.
 Program will use 1 + 7 slave threads.
-Opened file: /home/carl/DCP/betty_stereo.wav
-Sample rate: 44100
-Channels: 2
-Format: 1245186
-Frames: 7482240
 Leq(M): 88.2780
