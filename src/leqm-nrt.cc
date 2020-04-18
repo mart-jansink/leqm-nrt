@@ -250,8 +250,8 @@ private:
 	std::thread _thread;
 };
 
-int equalinterval( double * freqsamples, double * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints);
-int equalinterval2( double freqsamples[], double * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
+int equalinterval(double const * freqsamples, double const * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints);
+int equalinterval2(double const freqsamples[], double const * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
 int convloglin(double * in, double * out, int points);
 double convlinlog_single(double in);
 double convloglin_single(double in);
@@ -264,13 +264,40 @@ void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
 
-int calculate(
+struct Result
+{
+	Result()
+		: status(0)
+	{}
+
+	Result(int status_)
+		: status(status_)
+	{}
+
+	/** 0 on success, or
+	 *
+	 * -100: Either channel_corrections contained a different number of
+	 *  calibrations than; number of channels in the file or it was empty and  the
+	 *  program cannot infer one from the number of channels. Please specify a
+	 *  values in channel_corrections.
+	 *
+	 * -101: Failed to open the sound file.
+	 *
+	 * -102: buffersizems is not an integer number of samples at the sound file's rate.
+	 */
+	int status;
+
+	double leq_m;
+	double leq_nw;
+};
+
+
+Result calculate(
 	std::string sound_filename,
 	std::vector<double> channel_corrections,
 	int buffersizems,
 	int number_of_filter_interpolation_points,
 	int numCPU,
-	bool display_leqnw,
 	bool enable_leqm_log,
 	bool enable_leqm10_log,
 	bool measure_timing
@@ -400,23 +427,27 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(sound_filename, channel_corrections, buffersizems, number_of_filter_interpolation_points, numCPU, display_leqnw, enable_leqm_log, enable_leqm10_log, measure_timing);
+	auto result = calculate(sound_filename, channel_corrections, buffersizems, number_of_filter_interpolation_points, numCPU, enable_leqm_log, enable_leqm10_log, measure_timing);
+
+	if (display_leqnw) {
+		printf("Leq(nW): %.4f\n", result.leq_nw); // Leq(no Weighting)
+	}
+	printf("Leq(M): %.4f\n", result.leq_m);
+
+	return result.status;
 }
 
-int calculate(
+Result calculate(
 	std::string sound_filename,
 	std::vector<double> channel_corrections,
 	int buffersizems,
 	int number_of_filter_interpolation_points,
 	int numCPU,
-	bool display_leqnw,
 	bool enable_leqm_log,
 	bool enable_leqm10_log,
 	bool measure_timing
 	)
 {
-	FILE *leqm10logfile = nullptr;
-	FILE *leqmlogfile = nullptr;
 	struct timespec starttime;
 	double * shorttermaveragedarray = nullptr;
 	int constexpr origpoints = 21; //number of points in the standard CCIR filter
@@ -425,9 +456,7 @@ int calculate(
 	sf_info.format = 0;
 	SNDFILE* file = sf_open(sound_filename.c_str(), SFM_READ, &sf_info);
 	if (!file) {
-		printf("Error while opening audio file, could not open %s\n.", sound_filename.c_str());
-		puts(sf_strerror(NULL));
-		return 1;
+		return {-101};
 	}
 
 	std::vector<double> channel_conf_cal;
@@ -444,51 +473,37 @@ int calculate(
 			channel_conf_cal.push_back(convloglin_single(conf51[cind]));
 		}
 	} else {
-		printf("Either you specified a different number of calibration than number of channels in the file or you do not indicate any calibration and the program cannot infer one from the number of channels. Please specify a channel calibration on the command line.\n");
-		return 0;
+		return {-100};
 	}
 
+	FILE *leqm10logfile = nullptr;
 	if (enable_leqm10_log) {
 		std::string log_filename = sound_filename + ".leqm10.txt";
 		leqm10logfile = fopen(log_filename.c_str(), "w");
-		if (!leqm10logfile) {
-			printf("Could not open file to write log leqm10 data!\n");
-		}
+		/* If that failed we just won't get any log */
 	}
 
+	FILE *leqmlogfile = nullptr;
 	if (enable_leqm_log) {
 		std::string log_filename = sound_filename + ".leqmlog.txt";
 		leqmlogfile = fopen(log_filename.c_str(), "w");
-		if (!leqmlogfile) {
-			printf("Could not open file to write log leqm data!\n");
-		}
+		/* If that failed we just won't get any log */
 	}
-
 
 	if (measure_timing) {
 		clock_gettime(CLOCK_MONOTONIC, &starttime);
 	}
 
-	// reading to a double or float buffer with sndfile take care of normalization
-	double * buffer;
-	if ((sf_info.samplerate*buffersizems)%1000) {
-		printf("Please fine tune the buffersize according to the sample rate\n");
-		//close file
-		// free memory
-		// write a function to do that
-		return 1;
+	if ((sf_info.samplerate * buffersizems) % 1000) {
+		return -102;
 	}
 
-	int buffer_size_samples = (sf_info.samplerate*sf_info.channels*buffersizems)/1000;
-	buffer = new double[buffer_size_samples];
-
-	int samplingfreq = sf_info.samplerate;
+	int buffer_size_samples = (sf_info.samplerate * sf_info.channels * buffersizems) / 1000;
+	double* buffer = new double[buffer_size_samples];
 
 	int numbershortperiods = 0;
-	if(enable_leqm10_log) {
-
+	if (enable_leqm10_log) {
 		//if duration < 10 mm exit
-
 		double featdursec = sf_info.frames / sf_info.samplerate;
 		if ((featdursec/60.0) < 10.0) {
 			printf("The audio file is too short to measure Leq(m10).\n");
@@ -497,20 +512,19 @@ int calculate(
 
 		//how many short periods in overall duration
 		int remainder = sf_info.frames % (sf_info.samplerate*buffersizems/1000);
-		if (remainder == 0)  numbershortperiods = sf_info.frames/(sf_info.samplerate*buffersizems/1000);
-		else  numbershortperiods = sf_info.frames/(sf_info.samplerate*buffersizems/1000) + 1;
+		if (remainder == 0) {
+			numbershortperiods = sf_info.frames/(sf_info.samplerate*buffersizems/1000);
+		} else {
+			numbershortperiods = sf_info.frames/(sf_info.samplerate*buffersizems/1000) + 1;
+		}
 
-		//allocate array
 		shorttermaveragedarray = (double *) malloc(sizeof(*shorttermaveragedarray)*numbershortperiods);
 	}
 
-
-	//End opening audio file
-
 	//ISO 21727:2004(E)
 	// M Weighting
-	double freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
-	double freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
+	double const freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
+	double const freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
 
 	double * eqfreqresp_db = new double[number_of_filter_interpolation_points];
 	double * eqfreqsamples = new double[number_of_filter_interpolation_points];
@@ -542,7 +556,7 @@ int calculate(
 
 
 
-	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, samplingfreq, origpoints, bitdepth);
+	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, sf_info.samplerate, origpoints, bitdepth);
 	convloglin(eqfreqresp_db, eqfreqresp, number_of_filter_interpolation_points);
 
 #ifdef DEBUG
@@ -556,6 +570,7 @@ int calculate(
 	// read through the entire file
 
 	auto totsum = new Sum();
+	Result result;
 	sf_count_t samples_read = 0;
 
 	// Main loop through audio file
@@ -575,7 +590,7 @@ int calculate(
 			worker_id = 0;
 			worker_args.clear();
 			//simply log here your measurement it will be a multiple of your threads and your buffer
-			if (enable_leqm_log) {
+			if (leqmlogfile) {
 				meanoverduration(totsum); //update leq(m) until now and log it
 				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 			} //endlog
@@ -593,7 +608,7 @@ int calculate(
 			worker_args.clear();
 		}
 		//also log here for a last value
-		if (enable_leqm_log) {
+		if (leqmlogfile) {
 			meanoverduration(totsum); //update leq(m) until now and log it
 			logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 		} //endlog
@@ -601,10 +616,8 @@ int calculate(
 	// mean of scalar sum over duration
 
 	meanoverduration(totsum);
-	if (display_leqnw) {
-		printf("Leq(nW): %.4f\n", totsum->rms); // Leq(no Weighting)
-	}
-	printf("Leq(M): %.4f\n", totsum->leqm);
+	result.leq_nw = totsum->rms;
+	result.leq_m = totsum->leqm;
 
 	if (measure_timing) {
 		struct timespec stoptime;
@@ -622,7 +635,7 @@ int calculate(
 	}
 
 
-	if (enable_leqm10_log) {
+	if (leqm10logfile) {
 
 		//Take the array with the short term accumulators
 		double interval = 10.0;
@@ -661,7 +674,7 @@ int calculate(
 	}
 
 
-	if (enable_leqm_log) {
+	if (leqmlogfile) {
 		fclose(leqmlogfile);
 	}
 
@@ -675,7 +688,7 @@ int calculate(
 	delete totsum;
 	delete[] buffer;
 
-	return 0;
+	return result;
 }
 
 
@@ -684,7 +697,7 @@ int calculate(
 
 	//to get impulse response frequency response at equally spaced intervals is needed
 
-	int equalinterval( double * freqsamples, double  * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints) {
+	int equalinterval(double const * freqsamples, double const * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints) {
 		double freq;
 		// int findex = 0;
 		// int rindex = 0;
@@ -725,7 +738,7 @@ int calculate(
 	//the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
 	//it is also different for the way it interpolates between DC and 31 Hz
 	// Pay attention that also arguments to the functions are changed
-	int equalinterval2( double freqsamples[], double  freqresp_db[], double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
+	int equalinterval2(double const freqsamples[], double const freqresp_db[], double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
 		double freq;
 
 
