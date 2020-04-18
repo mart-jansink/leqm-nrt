@@ -263,7 +263,7 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw);
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, int timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
@@ -272,8 +272,8 @@ int main(int argc, const char ** argv)
 	// double normalizer;
 	int timing = 0;
 	int fileopenstate = 0;
-	int leqm10 = 0;
-	int leqmlog = 0;
+	bool enable_leqm10_log = false;
+	bool enable_leqm_log = false;
 #if defined __unix__ || defined  __APPLE__
 	int numCPU = sysconf(_SC_NPROCESSORS_ONLN) - 1;
 #elif defined _WIN64 || defined _WIN32
@@ -357,14 +357,14 @@ int main(int argc, const char ** argv)
 		}
 
 		if (strcmp(argv[in], "-logleqm10") == 0) {
-			leqm10 = 1;
+			enable_leqm10_log = 1;
 			in++;
 			printf("Leq(M)10 data will be logged to the file leqm10.txt\n");
 			continue;
 
 		}
 		if (strcmp(argv[in], "-logleqm") == 0) {
-			leqmlog = 1;
+			enable_leqm_log = true;
 			in++;
 			printf("Leq(M) data will be logged to the file leqmlog.txt\n");
 			continue;
@@ -392,10 +392,10 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(channel_corrections, sound_filename, leqmlog, leqm10, timing, numbershortperiods, buffersizems, numCPU, npoints, origpoints, leqnw);
+	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, timing, numbershortperiods, buffersizems, numCPU, npoints, origpoints, leqnw);
 }
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw)
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, int timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
@@ -429,7 +429,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 		return 0;
 	}
 
-	if (leqm10) {
+	if (enable_leqm10_log) {
 		std::string log_filename = sound_filename + ".leqm10.txt";
 		leqm10logfile = fopen(log_filename.c_str(), "w");
 		if (!leqm10logfile) {
@@ -437,7 +437,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 		}
 	}
 
-	if (leqmlog) {
+	if (enable_leqm_log) {
 		std::string log_filename = sound_filename + ".leqmlog.txt";
 		leqmlogfile = fopen(log_filename.c_str(), "w");
 		if (!leqmlogfile) {
@@ -465,7 +465,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 
 	int samplingfreq = sf_info.samplerate;
 
-	if(leqm10) {
+	if(enable_leqm10_log) {
 
 		//if duration < 10 mm exit
 
@@ -547,7 +547,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 
 	while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
 		worker_args.push_back(std::make_shared<Worker>(
-					buffer, buffer_size_samples, samples_read, sf_info.channels, npoints, ir, totsum, channel_conf_cal, leqm10 ? staindex++ : 0, leqm10 ? shorttermaveragedarray : 0, leqm10 ? 1 : 0)
+					buffer, buffer_size_samples, samples_read, sf_info.channels, npoints, ir, totsum, channel_conf_cal, enable_leqm10_log ? staindex++ : 0, enable_leqm10_log ? shorttermaveragedarray : 0, enable_leqm10_log ? 1 : 0)
 				);
 		worker_id++;
 
@@ -555,7 +555,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 			worker_id = 0;
 			worker_args.clear();
 			//simply log here your measurement it will be a multiple of your threads and your buffer
-			if (leqmlog) {
+			if (enable_leqm_log) {
 				meanoverduration(totsum); //update leq(m) until now and log it
 				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 			} //endlog
@@ -573,7 +573,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 			worker_args.clear();
 		}
 		//also log here for a last value
-		if (leqmlog) {
+		if (enable_leqm_log) {
 			meanoverduration(totsum); //update leq(m) until now and log it
 			logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 		} //endlog
@@ -602,7 +602,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 	}
 
 
-	if (leqm10) {
+	if (enable_leqm10_log) {
 
 		//Take the array with the short term accumulators
 		double interval = 10.0;
@@ -641,8 +641,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 	}
 
 
-	if (leqmlog) {
-
+	if (enable_leqm_log) {
 		fclose(leqmlogfile);
 	}
 
@@ -655,6 +654,8 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 
 	delete totsum;
 	delete[] buffer;
+
+	return 0;
 }
 
 
