@@ -263,11 +263,11 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int npoints, int leqnw);
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int number_of_filter_interpolation_points, bool display_leqnw);
 
 int main(int argc, const char ** argv)
 {
-	int npoints = 64; // This value is low for precision. Calibration is done with 32768 point.
+	int number_of_filter_interpolation_points = 64; // This value is low for precision. Calibration is done with 32768 point.
 	bool measure_timing = false;
 	int fileopenstate = 0;
 	bool enable_leqm10_log = false;
@@ -285,7 +285,7 @@ int main(int argc, const char ** argv)
 	int buffersizems = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
 	std::vector<double> channel_corrections;
 	int parameterstate = 0;
-	int leqnw = 0;
+	bool display_leqnw = false;
 	std::string sound_filename;
 
 	if (argc == 1)
@@ -324,9 +324,9 @@ int main(int argc, const char ** argv)
 		}
 
 		if (strcmp(argv[in], "-convpoints") == 0) {
-			npoints = atoi(argv[in + 1]);
+			number_of_filter_interpolation_points = atoi(argv[in + 1]);
 			in+=2;
-			printf("Convolution points sets to %d.\n", npoints);
+			printf("Convolution points sets to %d.\n", number_of_filter_interpolation_points);
 			continue;
 
 		}
@@ -369,7 +369,7 @@ int main(int argc, const char ** argv)
 		}
 
 		if (strcmp(argv[in], "-leqnw") == 0) {
-			leqnw = 1;
+			display_leqnw = true;
 			in++;
 			printf("Leq(nW) - unweighted -  will be outputted.\n");
 			continue;
@@ -389,10 +389,10 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, measure_timing, buffersizems, numCPU, npoints, leqnw);
+	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, measure_timing, buffersizems, numCPU, number_of_filter_interpolation_points, display_leqnw);
 }
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int npoints, int leqnw)
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int number_of_filter_interpolation_points, bool display_leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
@@ -491,10 +491,10 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 	double freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
 	double freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
 
-	double * eqfreqresp_db = new double[npoints];
-	double * eqfreqsamples = new double[npoints];
-	double * eqfreqresp = new double[npoints];
-	double * ir = new double[npoints * 2];
+	double * eqfreqresp_db = new double[number_of_filter_interpolation_points];
+	double * eqfreqsamples = new double[number_of_filter_interpolation_points];
+	double * eqfreqresp = new double[number_of_filter_interpolation_points];
+	double * ir = new double[number_of_filter_interpolation_points * 2];
 
 	// And what to do for floating point sample coding?
 
@@ -521,16 +521,16 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 
 
 
-	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, npoints, samplingfreq, origpoints, bitdepth);
-	convloglin(eqfreqresp_db, eqfreqresp, npoints);
+	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, samplingfreq, origpoints, bitdepth);
+	convloglin(eqfreqresp_db, eqfreqresp, number_of_filter_interpolation_points);
 
 #ifdef DEBUG
-	for (int i=0; i < npoints; i++) {
+	for (int i=0; i < number_of_filter_interpolation_points; i++) {
 		printf("%d\t%.2f\t%.2f\t%.6f\n", i, eqfreqsamples[i], eqfreqresp_db[i], eqfreqresp[i]);
 	}
 #endif
 
-	inversefft2(eqfreqresp, ir, npoints);
+	inversefft2(eqfreqresp, ir, number_of_filter_interpolation_points);
 
 	// read through the entire file
 
@@ -546,7 +546,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 
 	while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
 		worker_args.push_back(std::make_shared<Worker>(
-					buffer, buffer_size_samples, samples_read, sf_info.channels, npoints, ir, totsum, channel_conf_cal, enable_leqm10_log ? staindex++ : 0, enable_leqm10_log ? shorttermaveragedarray : 0, enable_leqm10_log ? 1 : 0)
+					buffer, buffer_size_samples, samples_read, sf_info.channels, number_of_filter_interpolation_points, ir, totsum, channel_conf_cal, enable_leqm10_log ? staindex++ : 0, enable_leqm10_log ? shorttermaveragedarray : 0, enable_leqm10_log ? 1 : 0)
 				);
 		worker_id++;
 
@@ -580,7 +580,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 	// mean of scalar sum over duration
 
 	meanoverduration(totsum);
-	if (leqnw) {
+	if (display_leqnw) {
 		printf("Leq(nW): %.4f\n", totsum->rms); // Leq(no Weighting)
 	}
 	printf("Leq(M): %.4f\n", totsum->leqm);
