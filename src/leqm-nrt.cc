@@ -263,12 +263,11 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw);
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int npoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
 	int npoints = 64; // This value is low for precision. Calibration is done with 32768 point.
-	int origpoints = 21; //number of points in the standard CCIR filter
 	bool measure_timing = false;
 	int fileopenstate = 0;
 	bool enable_leqm10_log = false;
@@ -390,15 +389,16 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, measure_timing, buffersizems, numCPU, npoints, origpoints, leqnw);
+	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, measure_timing, buffersizems, numCPU, npoints, leqnw);
 }
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw)
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int npoints, int leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
 	struct timespec starttime;
 	double * shorttermaveragedarray = nullptr;
+	int constexpr origpoints = 21; //number of points in the standard CCIR filter
 
 	SF_INFO sf_info;
 	sf_info.format = 0;
