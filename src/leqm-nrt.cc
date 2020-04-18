@@ -69,7 +69,9 @@ struct Sum {
   double rms;
 };
 
-struct Worker {
+class Worker
+{
+public:
 	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* ptrtotsum, double* chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
 		: _arg_buffer(new double[buffer_size_samples])
 		, _nsamples(nsamples)
