@@ -68,19 +68,19 @@ struct Sum {
 };
 
 struct WorkerArgs {
-	WorkerArgs(double* buffer, int buffer_size_samples, int nsamples_, int nch_, int npoints_, double* ir_, Sum* ptrtotsum_, double* chconf_, int shorttermindex_, double* shorttermarray_, int leqm10flag_)
-		: arg_buffer(new double[buffer_size_samples])
-		, nsamples(nsamples_)
-		, nch(nch_)
-		, npoints(npoints_)
-		, ir(ir_)
-		, ptrtotsum(ptrtotsum_)
-		, chconf(chconf_)
-		, shorttermindex(shorttermindex_)
-		, shorttermarray(shorttermarray_)
-		, leqm10flag(leqm10flag_)
+	WorkerArgs(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* ptrtotsum, double* chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
+		: _arg_buffer(new double[buffer_size_samples])
+		, _nsamples(nsamples)
+		, _nch(nch)
+		, _npoints(npoints)
+		, _ir(ir)
+		, _ptrtotsum(ptrtotsum)
+		, _chconf(chconf)
+		, _shorttermindex(shorttermindex)
+		, _shorttermarray(shorttermarray)
+		, _leqm10flag(leqm10flag)
 	{
-		memcpy(arg_buffer, buffer, nsamples * sizeof(double));
+		memcpy(_arg_buffer, buffer, nsamples * sizeof(double));
 	}
 
 	WorkerArgs(WorkerArgs& other) = delete;
@@ -90,19 +90,19 @@ struct WorkerArgs {
 
 	~WorkerArgs()
 	{
-		delete[] arg_buffer;
+		delete[] _arg_buffer;
 	}
 
-	double * arg_buffer;
-	int nsamples;
-	int nch;
-	int npoints;
-	double * ir;
-	struct Sum * ptrtotsum;
-	double * chconf;
-	int shorttermindex;
-	double * shorttermarray;
-	int leqm10flag;
+	double* _arg_buffer;
+	int _nsamples;
+	int _nch;
+	int _npoints;
+	double* _ir;
+	struct Sum* _ptrtotsum;
+	double* _chconf;
+	int _shorttermindex;
+	double* _shorttermarray;
+	int _leqm10flag;
 };
 
 int equalinterval( double * freqsamples, double * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints);
@@ -607,7 +607,7 @@ void * worker_function(void * argstruct) {
 
   struct WorkerArgs * thisWorkerArgs = (struct WorkerArgs *) argstruct;
 
-  int const frames = thisWorkerArgs->nsamples / thisWorkerArgs->nch;
+  int const frames = thisWorkerArgs->_nsamples / thisWorkerArgs->_nch;
 
   auto sum_and_square_buffer = new double[frames];
   auto c_sum_and_square_buffer = new double[frames];
@@ -621,19 +621,19 @@ void * worker_function(void * argstruct) {
     ch_sum_accumulator_conv[i] = 0.0;
   }
 
-  for (int ch = 0; ch < thisWorkerArgs->nch; ch++) {
+  for (int ch = 0; ch < thisWorkerArgs->_nch; ch++) {
 
     auto normalized_buffer = new double[frames];
     auto convolved_buffer = new double[frames];
 
-    for (int n=ch, m= 0; n < thisWorkerArgs->nsamples; n += thisWorkerArgs->nch, m++) {
+    for (int n=ch, m= 0; n < thisWorkerArgs->_nsamples; n += thisWorkerArgs->_nch, m++) {
 	    // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
 	    //so not normalized but calibrated
-	    normalized_buffer[m] = thisWorkerArgs->arg_buffer[n] * thisWorkerArgs->chconf[ch]; //this scale amplitude according to specified calibration
+	    normalized_buffer[m] = thisWorkerArgs->_arg_buffer[n] * thisWorkerArgs->_chconf[ch]; //this scale amplitude according to specified calibration
     }
 
  //convolution
- convolv_buff(normalized_buffer, convolved_buffer, thisWorkerArgs->ir, frames, thisWorkerArgs->npoints * 2);
+ convolv_buff(normalized_buffer, convolved_buffer, thisWorkerArgs->_ir, frames, thisWorkerArgs->_npoints * 2);
  //rectify, square und sum
  rectify(c_sum_and_square_buffer, convolved_buffer, frames);
  rectify(sum_and_square_buffer, normalized_buffer, frames);
@@ -652,15 +652,15 @@ void * worker_function(void * argstruct) {
 
     //Create a function for this also a tag so that the worker know if he has to do this or not
 
-  if (thisWorkerArgs->leqm10flag) {
-    thisWorkerArgs->shorttermarray[thisWorkerArgs->shorttermindex] = sumandshorttermavrg(ch_sum_accumulator_conv, frames);
+  if (thisWorkerArgs->_leqm10flag) {
+    thisWorkerArgs->_shorttermarray[thisWorkerArgs->_shorttermindex] = sumandshorttermavrg(ch_sum_accumulator_conv, frames);
     #ifdef DEBUG
-    printf("%d: %.6f\n", thisWorkerArgs->shorttermindex, thisWorkerArgs->shorttermarray[thisWorkerArgs->shorttermindex]);
+    printf("%d: %.6f\n", thisWorkerArgs->_shorttermindex, thisWorkerArgs->_shorttermarray[thisWorkerArgs->_shorttermindex]);
     #endif
   }
   pthread_mutex_lock(&mutex);
   // this should be done under mutex conditions -> shared resources!
-  sumsamples(thisWorkerArgs->ptrtotsum, ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
+  sumsamples(thisWorkerArgs->_ptrtotsum, ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
   pthread_mutex_unlock(&mutex);
 
 
@@ -679,7 +679,7 @@ void * worker_function(void * argstruct) {
   // the memory pointed to by this pointer is freed in main
   // it is the same memory for all worker
   // but it is necessary to set pointer to NULL otherwise free will not work later (really?)
-  thisWorkerArgs->chconf = NULL;
+  thisWorkerArgs->_chconf = NULL;
  pthread_exit(0);
 
 }
