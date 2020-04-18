@@ -283,7 +283,7 @@ struct Result
 	 *
 	 * -101: Failed to open the sound file.
 	 *
-	 * -102: buffersizems is not an integer number of samples at the sound file's rate.
+	 * -102: buffer_size_ms is not an integer number of samples at the sound file's rate.
 	 */
 	int status;
 
@@ -295,7 +295,7 @@ struct Result
 Result calculate(
 	std::string sound_filename,
 	std::vector<double> channel_corrections,
-	int buffersizems,
+	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
 	int numCPU,
 	bool enable_leqm_log,
@@ -319,8 +319,7 @@ int main(int argc, const char ** argv)
 #endif
 
 	printf("leqm-nrt  Copyright (C) 2011-2013, 2017-2018 Luca Trisciani\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the GPL v3 licence.\nProgram will use 1 + %d slave threads.\n", numCPU);
-	//SndfileHandle file;
-	int buffersizems = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
+	int buffer_size_ms = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
 	std::vector<double> channel_corrections;
 	int parameterstate = 0;
 	bool display_leqnw = false;
@@ -415,9 +414,9 @@ int main(int argc, const char ** argv)
 		}
 
 		if (strcmp(argv[in], "-buffersize") == 0) {
-			buffersizems = atoi(argv[in + 1]);
+			buffer_size_ms = atoi(argv[in + 1]);
 			in+=2;
-			printf("Buffersize will be set to %d milliseconds.\n", buffersizems);
+			printf("Buffersize will be set to %d milliseconds.\n", buffer_size_ms);
 			continue;
 
 		}
@@ -427,7 +426,7 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	auto result = calculate(sound_filename, channel_corrections, buffersizems, number_of_filter_interpolation_points, numCPU, enable_leqm_log, enable_leqm10_log, measure_timing);
+	auto result = calculate(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, numCPU, enable_leqm_log, enable_leqm10_log, measure_timing);
 
 	if (display_leqnw) {
 		printf("Leq(nW): %.4f\n", result.leq_nw); // Leq(no Weighting)
@@ -440,7 +439,7 @@ int main(int argc, const char ** argv)
 Result calculate(
 	std::string sound_filename,
 	std::vector<double> channel_corrections,
-	int buffersizems,
+	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
 	int numCPU,
 	bool enable_leqm_log,
@@ -494,11 +493,11 @@ Result calculate(
 		clock_gettime(CLOCK_MONOTONIC, &starttime);
 	}
 
-	if ((sf_info.samplerate * buffersizems) % 1000) {
+	if ((sf_info.samplerate * buffer_size_ms) % 1000) {
 		return -102;
 	}
 
-	int buffer_size_samples = (sf_info.samplerate * sf_info.channels * buffersizems) / 1000;
+	int buffer_size_samples = (sf_info.samplerate * sf_info.channels * buffer_size_ms) / 1000;
 	double* buffer = new double[buffer_size_samples];
 
 	int numbershortperiods = 0;
@@ -511,11 +510,11 @@ Result calculate(
 		}
 
 		//how many short periods in overall duration
-		int remainder = sf_info.frames % (sf_info.samplerate*buffersizems/1000);
+		int remainder = sf_info.frames % (sf_info.samplerate*buffer_size_ms/1000);
 		if (remainder == 0) {
-			numbershortperiods = sf_info.frames/(sf_info.samplerate*buffersizems/1000);
+			numbershortperiods = sf_info.frames/(sf_info.samplerate*buffer_size_ms/1000);
 		} else {
-			numbershortperiods = sf_info.frames/(sf_info.samplerate*buffersizems/1000) + 1;
+			numbershortperiods = sf_info.frames/(sf_info.samplerate*buffer_size_ms/1000) + 1;
 		}
 
 		shorttermaveragedarray = (double *) malloc(sizeof(*shorttermaveragedarray)*numbershortperiods);
@@ -581,9 +580,22 @@ Result calculate(
 
 
 	while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
-		worker_args.push_back(std::make_shared<Worker>(
-					buffer, buffer_size_samples, samples_read, sf_info.channels, number_of_filter_interpolation_points, ir, totsum, channel_conf_cal, enable_leqm10_log ? staindex++ : 0, enable_leqm10_log ? shorttermaveragedarray : 0, enable_leqm10_log ? 1 : 0)
-				);
+		worker_args.push_back(
+			std::make_shared<Worker>(
+				buffer,
+				buffer_size_samples,
+				samples_read,
+				sf_info.channels,
+				number_of_filter_interpolation_points,
+				ir,
+				totsum,
+				channel_conf_cal,
+				enable_leqm10_log ? staindex++ : 0,
+				enable_leqm10_log ? shorttermaveragedarray : 0,
+				enable_leqm10_log ? 1 : 0
+				)
+			);
+
 		worker_id++;
 
 		if (worker_id == numCPU) {
@@ -595,25 +607,17 @@ Result calculate(
 				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 			} //endlog
 		}
+	}
 
-
-		//end while worker_id
-		/// End looping cores
-	} // main loop through file
-
-	//here I should wait for rest worker (< numcpu)
-	//but I need to dispose of thread id.
-	if (worker_id != 0) { // worker_id = 0 means the number of samples was divisible through the number of cpus
+	if (worker_id != 0) {
 		for (int idxcpu = 0; idxcpu < worker_id; idxcpu++) { //worker_id is at this point one unit more than threads launched
 			worker_args.clear();
 		}
-		//also log here for a last value
 		if (leqmlogfile) {
 			meanoverduration(totsum); //update leq(m) until now and log it
 			logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
-		} //endlog
+		}
 	}
-	// mean of scalar sum over duration
 
 	meanoverduration(totsum);
 	result.leq_nw = totsum->rms;
@@ -644,8 +648,8 @@ Result calculate(
 
 
 		//how many element of the array to consider for the rollint?
-		//that is how many buffersizems in the interval - interval could be parameterized(?)
-		double tempint = 60.0 * interval / (((double) buffersizems) /1000.0);
+		//that is how many buffer_size_ms in the interval - interval could be parameterized(?)
+		double tempint = 60.0 * interval / (((double) buffer_size_ms) /1000.0);
 		rollint = (int) tempint;
 		//dispose of the rest
 		if (tempint - ((double) rollint) > 0) {
@@ -664,7 +668,7 @@ Result calculate(
 				accumulator += shorttermaveragedarray[indexshort+indexlong];
 			} //end internal loop
 			averagedaccumulator = accumulator/((double) rollint);
-			logleqm10(leqm10logfile, ((double) (indexlong+rollint)) * ((double) buffersizems / 1000.0), averagedaccumulator);
+			logleqm10(leqm10logfile, ((double) (indexlong+rollint)) * ((double) buffer_size_ms / 1000.0), averagedaccumulator);
 			indexlong++;
 		} //end external loop
 
