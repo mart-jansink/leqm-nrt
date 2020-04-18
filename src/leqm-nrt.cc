@@ -263,14 +263,13 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, int timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw);
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
 	int npoints = 64; // This value is low for precision. Calibration is done with 32768 point.
 	int origpoints = 21; //number of points in the standard CCIR filter
-	// double normalizer;
-	int timing = 0;
+	bool measure_timing = false;
 	int fileopenstate = 0;
 	bool enable_leqm10_log = false;
 	bool enable_leqm_log = false;
@@ -349,7 +348,7 @@ int main(int argc, const char ** argv)
 
 		}
 		if (strcmp(argv[in], "-timing") == 0) {
-			timing = 1;
+			measure_timing = true;
 			in++;
 			printf("Execution time will be measured.\n");
 			continue;
@@ -392,10 +391,10 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, timing, numbershortperiods, buffersizems, numCPU, npoints, origpoints, leqnw);
+	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, measure_timing, numbershortperiods, buffersizems, numCPU, npoints, origpoints, leqnw);
 }
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, int timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw)
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int numbershortperiods, int buffersizems, int numCPU, int npoints, int origpoints, int leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
@@ -446,7 +445,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 	}
 
 
-	if (timing) {
+	if (measure_timing) {
 		clock_gettime(CLOCK_MONOTONIC, &starttime);
 	}
 
@@ -586,7 +585,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 	}
 	printf("Leq(M): %.4f\n", totsum->leqm);
 
-	if(timing) {
+	if (measure_timing) {
 		struct timespec stoptime;
 		long stoptimenanoseconds;
 		long executionnanoseconds;
