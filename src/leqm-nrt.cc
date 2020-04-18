@@ -67,10 +67,6 @@ public:
 		csum = 0.0;
 		sum = 0.0;
 		nsamples = 0;
-		cmean = 0.0;
-		mean = 0.0; // Do I write anything here?
-		leqm = 0.0;
-		rms = 0.0;
 	}
 
 	void sum_samples(double * inputsamples, double * cinputsamples, int nsamples_)
@@ -84,31 +80,39 @@ public:
 		_mutex.unlock();
 	}
 
-	void mean_over_duration()
-	{
-		mean = pow(sum / ((double) nsamples), 0.500);
-		cmean = pow(csum / ((double) nsamples), 0.500);
-		rms = 20 * log10(mean) + 108.010299957;
-		leqm = 20 * log10(cmean) + 108.010299957;
+	/*
+	   How the final offset is calculated without reference to a test tone:
+	   P0 is the SPL reference 20 uPa
+	   Reference SPL is RMS ! So 85 SPL over 20 uPa is 10^4.25 x 0.000020 = 0.355655882 Pa (RMS),
+	   but Peak value is 0.355655882 x sqr(2) = 0.502973372 that is 20 x log ( 0.502973372 / 0.000020) = 88.010299957
+	   To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957
 
-		/*
-		   How the final offset is calculated without reference to a test tone:
-		   P0 is the SPL reference 20 uPa
-		   Reference SPL is RMS ! So 85 SPL over 20 uPa is 10^4.25 x 0.000020 = 0.355655882 Pa (RMS),
-		   but Peak value is 0.355655882 x sqr(2) = 0.502973372 that is 20 x log ( 0.502973372 / 0.000020) = 88.010299957
-		   To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957
-		   */
-		/*But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
-		*/
+	   But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
+	   */
+
+	double mean() const
+	{
+		return pow(sum / ((double) nsamples), 0.500);
+	}
+
+	double cmean() const
+	{
+		return pow(csum / ((double) nsamples), 0.500);
+	}
+
+	double rms() const
+	{
+		return 20 * log10(mean()) + 108.010299957;
+	}
+
+	double leqm() const
+	{
+		return 20 * log10(cmean()) + 108.010299957;
 	}
 
 	double csum; // convolved sum
 	double sum; // flat sum
 	int nsamples;
-	double cmean; //convolved mean
-	double mean;
-	double leqm;
-	double rms;
 
 private:
 	std::mutex _mutex;
@@ -620,8 +624,7 @@ Result calculate(
 			worker_args.clear();
 			//simply log here your measurement it will be a multiple of your threads and your buffer
 			if (leqmlogfile) {
-				totsum->mean_over_duration(); //update leq(m) until now and log it
-				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
+				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum);
 			} //endlog
 		}
 	}
@@ -631,14 +634,12 @@ Result calculate(
 			worker_args.clear();
 		}
 		if (leqmlogfile) {
-			totsum->mean_over_duration(); //update leq(m) until now and log it
 			logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 		}
 	}
 
-	totsum->mean_over_duration();
-	result.leq_nw = totsum->rms;
-	result.leq_m = totsum->leqm;
+	result.leq_nw = totsum->rms();
+	result.leq_m = totsum->leqm();
 
 	if (measure_timing) {
 		struct timespec stoptime;
@@ -864,7 +865,7 @@ Result calculate(
 
 		fprintf(filehandle, "%.4f", featuretimesec);
 		fprintf(filehandle, "\t");
-		fprintf(filehandle, "%.4f\n", oldsum->leqm);
+		fprintf(filehandle, "%.4f\n", oldsum->leqm());
 
 
 	}
