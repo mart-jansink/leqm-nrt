@@ -263,7 +263,7 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilename, double* channelconfcalvector, double* tempchcal, int leqmlog, FILE* leqmlogfile, int leqm10, FILE* leqm10logfile, struct timespec& starttime, int timing, double* shorttermaveragedarray, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
+int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilename, double* channelconfcalvector, double* tempchcal, int leqmlog, int leqm10, struct timespec& starttime, int timing, double* shorttermaveragedarray, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
@@ -291,10 +291,6 @@ int main(int argc, const char ** argv)
 	SNDFILE *file;
 	file=NULL;
 	SF_INFO sfinfo;
-	FILE *leqm10logfile;
-	leqm10logfile = NULL;
-	FILE *leqmlogfile;
-	leqmlogfile = NULL;
 	int buffersizems = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
 	int buffer_size_samples;
 	double tempchcal[128];
@@ -434,11 +430,13 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(numcalread, file, sfinfo, soundfilename, channelconfcalvector, tempchcal, leqmlog, leqmlogfile, leqm10, leqm10logfile, starttime, timing, shorttermaveragedarray, bitdepth, numbershortperiods, buffersizems, buffer_size_samples, numCPU, samplingfreq, npoints, origpoints, leqnw);
+	return calculate(numcalread, file, sfinfo, soundfilename, channelconfcalvector, tempchcal, leqmlog, leqm10, starttime, timing, shorttermaveragedarray, bitdepth, numbershortperiods, buffersizems, buffer_size_samples, numCPU, samplingfreq, npoints, origpoints, leqnw);
 }
 
-int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilename, double* channelconfcalvector, double* tempchcal, int leqmlog, FILE* leqmlogfile, int leqm10, FILE* leqm10logfile, struct timespec& starttime, int timing, double* shorttermaveragedarray, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
+int calculate(int numcalread, SNDFILE* file, SF_INFO& sfinfo, char* soundfilename, double* channelconfcalvector, double* tempchcal, int leqmlog, int leqm10, struct timespec& starttime, int timing, double* shorttermaveragedarray, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
 {
+	FILE *leqm10logfile = nullptr;
+	FILE *leqmlogfile = nullptr;
 	// Open audio file
 
 	//postprocessing parameters
