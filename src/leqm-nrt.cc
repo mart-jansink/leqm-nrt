@@ -62,13 +62,13 @@
 class Sum
 {
 public:
-	void sum_samples(std::vector<double> const& inputsamples, std::vector<double> const& cinputsamples, int nsamples)
+	void sum_samples(std::vector<double> const& input_samples, std::vector<double> const& c_input_samples, int nsamples)
 	{
 		_mutex.lock();
 		_nsamples += nsamples;
 		for (auto i = 0; i < nsamples; i++) {
-			_sum  += inputsamples[i];
-			_csum += cinputsamples[i];
+			_sum  += input_samples[i];
+			_csum += c_input_samples[i];
 		}
 		_mutex.unlock();
 	}
@@ -149,50 +149,48 @@ public:
 
 
 private:
-	double sumandshorttermavrg(std::vector<double>const & channelaccumulator, int nsamples) const
+	double sum_and_short_term_avrg(std::vector<double>const & channel_accumulator, int nsamples) const
 	{
 		double stsum = 0.0;
 		for (auto i = 0; i < nsamples; i++) {
-			stsum += channelaccumulator[i];
+			stsum += channel_accumulator[i];
 
 		}
-		return stsum / (double) nsamples;
+		return stsum / nsamples;
 	}
 
-	int accumulatech(std::vector<double>& chaccumulator, std::vector<double> const& inputchannel, int nsamples) const
+	int accumulate_ch(std::vector<double>& ch_accumulator, std::vector<double> const& input_channel, int nsamples) const
 	{
 		for (auto i = 0; i < nsamples; i++) {
-			chaccumulator[i] += inputchannel[i];
+			ch_accumulator[i] += input_channel[i];
 		}
 		return 0;
 	}
 
 	//rectify, square and sum
-	int rectify(std::vector<double>& squared, std::vector<double> const& inputsamples, int nsamples) const
+	int rectify(std::vector<double>& squared, std::vector<double> const& input_samples, int nsamples) const
 	{
 		for (auto i = 0; i < nsamples; i++) {
-			squared[i] = (double) powf(inputsamples[i], 2);
+			squared[i] = powf(input_samples[i], 2);
 		}
 		return 0;
 
 	}
 
-	int convolv_buff(std::vector<double> const& sigin, std::vector<double>& sigout, std::vector<double> const& impresp, int sigin_dim, int impresp_dim) const
+	void convolv_buff(std::vector<double> const& sig_in, std::vector<double>& sig_out, std::vector<double> const& impresp, int sigin_dim, int impresp_dim) const
 	{
 		double sum = 0.0;
 		for (int i = 0; i < sigin_dim; i++) {
-
 			int m = i;
-			for (int l = impresp_dim - 1; l >=0; l--,m++) {
+			for (int l = impresp_dim - 1; l >= 0; l--, m++) {
 				if (m >= sigin_dim) {
 					m -= sigin_dim;
 				}
-				sum += sigin[m]*impresp[l];
+				sum += sig_in[m] * impresp[l];
 			}
-			sigout[i] = sum;
-			sum=0.0;
+			sig_out[i] = sum;
+			sum = 0.0;
 		}
-		return 0;
 	}
 
 	void process()
@@ -221,15 +219,15 @@ private:
 			rectify(c_sum_and_square_buffer, convolved_buffer, frames);
 			rectify(sum_and_square_buffer, normalized_buffer, frames);
 
-			accumulatech(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
-			accumulatech(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
+			accumulate_ch(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
+			accumulate_ch(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
 
 		} // loop through channels
 
 		//Create a function for this also a tag so that the worker know if he has to do this or not
 
 		if (_leqm10flag) {
-			_shorttermarray[_shorttermindex] = sumandshorttermavrg(ch_sum_accumulator_conv, frames);
+			_shorttermarray[_shorttermindex] = sum_and_short_term_avrg(ch_sum_accumulator_conv, frames);
 #ifdef DEBUG
 			printf("%d: %.6f\n", _shorttermindex, _shorttermarray[_shorttermindex]);
 #endif
