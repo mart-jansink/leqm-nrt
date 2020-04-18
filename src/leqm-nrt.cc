@@ -263,7 +263,7 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
@@ -287,7 +287,6 @@ int main(int argc, const char ** argv)
 	printf("leqm-nrt  Copyright (C) 2011-2013, 2017-2018 Luca Trisciani\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the GPL v3 licence.\nProgram will use 1 + %d slave threads.\n", numCPU);
 	//SndfileHandle file;
 	int buffersizems = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
-	int buffer_size_samples;
 	std::vector<double> channel_corrections;
 	int numbershortperiods = 0;
 	int parameterstate = 0;
@@ -395,10 +394,10 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(channel_corrections, sound_filename, leqmlog, leqm10, timing, bitdepth, numbershortperiods, buffersizems, buffer_size_samples, numCPU, samplingfreq, npoints, origpoints, leqnw);
+	return calculate(channel_corrections, sound_filename, leqmlog, leqm10, timing, bitdepth, numbershortperiods, buffersizems, numCPU, samplingfreq, npoints, origpoints, leqnw);
 }
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
@@ -463,7 +462,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 		return 1;
 	}
 
-	buffer_size_samples = (sf_info.samplerate*sf_info.channels*buffersizems)/1000;
+	int buffer_size_samples = (sf_info.samplerate*sf_info.channels*buffersizems)/1000;
 	buffer = new double[buffer_size_samples];
 
 	samplingfreq = sf_info.samplerate;
