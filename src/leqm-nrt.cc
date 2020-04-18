@@ -99,13 +99,13 @@ private:
 class Worker
 {
 public:
-	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* ptrtotsum, double* chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
+	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* sum, double* chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
 		: _arg_buffer(new double[buffer_size_samples])
 		, _nsamples(nsamples)
 		, _nch(nch)
 		, _npoints(npoints)
 		, _ir(ir)
-		, _ptrtotsum(ptrtotsum)
+		, _sum(sum)
 		, _chconf(chconf)
 		, _shorttermindex(shorttermindex)
 		, _shorttermarray(shorttermarray)
@@ -228,7 +228,7 @@ private:
 #endif
 		}
 
-		_ptrtotsum->sumsamples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
+		_sum->sumsamples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
 
 		delete[] sum_and_square_buffer;
 		delete[] c_sum_and_square_buffer;
@@ -241,7 +241,7 @@ private:
 	int _nch;
 	int _npoints;
 	double* _ir;
-	Sum* _ptrtotsum;
+	Sum* _sum;
 	double* _chconf;
 	int _shorttermindex;
 	double* _shorttermarray;
