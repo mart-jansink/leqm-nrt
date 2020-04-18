@@ -62,22 +62,20 @@
 class Sum
 {
 public:
-	Sum()
-	{
-		csum = 0.0;
-		sum = 0.0;
-		nsamples = 0;
-	}
-
-	void sum_samples(double * inputsamples, double * cinputsamples, int nsamples_)
+	void sum_samples(double * inputsamples, double * cinputsamples, int nsamples)
 	{
 		_mutex.lock();
-		nsamples += nsamples_;
-		for (auto i = 0; i < nsamples_; i++) {
-			sum  += inputsamples[i];
-			csum += cinputsamples[i];
+		_nsamples += nsamples;
+		for (auto i = 0; i < nsamples; i++) {
+			_sum  += inputsamples[i];
+			_csum += cinputsamples[i];
 		}
 		_mutex.unlock();
+	}
+
+	int nsamples() const
+	{
+		return _nsamples;
 	}
 
 	/*
@@ -88,16 +86,16 @@ public:
 	   To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957
 
 	   But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
-	   */
+	*/
 
 	double mean() const
 	{
-		return pow(sum / ((double) nsamples), 0.500);
+		return pow(_sum / _nsamples, 0.500);
 	}
 
 	double cmean() const
 	{
-		return pow(csum / ((double) nsamples), 0.500);
+		return pow(_csum / _nsamples, 0.500);
 	}
 
 	double rms() const
@@ -110,11 +108,10 @@ public:
 		return 20 * log10(cmean()) + 108.010299957;
 	}
 
-	double csum; // convolved sum
-	double sum; // flat sum
-	int nsamples;
-
 private:
+	double _csum = 0.0; // convolved sum
+	double _sum = 0.0; // flat sum
+	int _nsamples = 0;
 	std::mutex _mutex;
 };
 
@@ -624,7 +621,7 @@ Result calculate(
 			worker_args.clear();
 			//simply log here your measurement it will be a multiple of your threads and your buffer
 			if (leqmlogfile) {
-				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum);
+				logleqm(leqmlogfile, ((double) totsum->nsamples())/((double) sf_info.samplerate), totsum);
 			} //endlog
 		}
 	}
@@ -634,7 +631,7 @@ Result calculate(
 			worker_args.clear();
 		}
 		if (leqmlogfile) {
-			logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
+			logleqm(leqmlogfile, ((double) totsum->nsamples())/((double) sf_info.samplerate), totsum );
 		}
 	}
 
