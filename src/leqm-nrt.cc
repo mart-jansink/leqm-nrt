@@ -62,7 +62,7 @@
 class Sum
 {
 public:
-	void sum_samples(double * inputsamples, double * cinputsamples, int nsamples)
+	void sum_samples(std::vector<double> const& inputsamples, std::vector<double> const& cinputsamples, int nsamples)
 	{
 		_mutex.lock();
 		_nsamples += nsamples;
@@ -118,8 +118,8 @@ private:
 class Worker
 {
 public:
-	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* sum, std::vector<double> chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
-		: _arg_buffer(new double[buffer_size_samples])
+	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, std::vector<double> const& ir, Sum* sum, std::vector<double> chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
+		: _arg_buffer(buffer_size_samples)
 		, _nsamples(nsamples)
 		, _nch(nch)
 		, _npoints(npoints)
@@ -130,7 +130,7 @@ public:
 		, _shorttermarray(shorttermarray)
 		, _leqm10flag(leqm10flag)
 	{
-		memcpy(_arg_buffer, buffer, nsamples * sizeof(double));
+		memcpy(_arg_buffer.data(), buffer, nsamples * sizeof(double));
 		_thread = std::thread(&Worker::process, this);
 	}
 
@@ -146,40 +146,39 @@ public:
 		} catch (...)
 		{
 		}
-		delete[] _arg_buffer;
 	}
 
 
 private:
-	double sumandshorttermavrg(double * channelaccumulator, int nsamples) const
+	double sumandshorttermavrg(std::vector<double>const & channelaccumulator, int nsamples) const
 	{
 		double stsum = 0.0;
-		for (int i=0; i < nsamples; i++) {
+		for (auto i = 0; i < nsamples; i++) {
 			stsum += channelaccumulator[i];
 
 		}
 		return stsum / (double) nsamples;
 	}
 
-	int accumulatech(double * chaccumulator, double * inputchannel, int nsamples) const
+	int accumulatech(std::vector<double>& chaccumulator, std::vector<double> const& inputchannel, int nsamples) const
 	{
-		for (int i = 0; i < nsamples; i++) {
+		for (auto i = 0; i < nsamples; i++) {
 			chaccumulator[i] += inputchannel[i];
 		}
 		return 0;
 	}
 
 	//rectify, square and sum
-	int rectify(double * squared, double * inputsamples, int nsamples) const
+	int rectify(std::vector<double>& squared, std::vector<double> const& inputsamples, int nsamples) const
 	{
-		for (int i = 0; i < nsamples; i++) {
+		for (auto i = 0; i < nsamples; i++) {
 			squared[i] = (double) powf(inputsamples[i], 2);
 		}
 		return 0;
 
 	}
 
-	int convolv_buff(double * sigin, double * sigout, double * impresp, int sigin_dim, int impresp_dim) const
+	int convolv_buff(std::vector<double> const& sigin, std::vector<double>& sigout, std::vector<double> const& impresp, int sigin_dim, int impresp_dim) const
 	{
 		double sum = 0.0;
 		for (int i = 0; i < sigin_dim; i++) {
@@ -201,24 +200,17 @@ private:
 	{
 		int const frames = _nsamples / _nch;
 
-		auto sum_and_square_buffer = new double[frames];
-		auto c_sum_and_square_buffer = new double[frames];
-		auto ch_sum_accumulator_norm = new double[frames];
-		auto ch_sum_accumulator_conv = new double[frames];
-
-		for (int i = 0; i < frames; i++) {
-			sum_and_square_buffer[i] = 0.0;
-			c_sum_and_square_buffer[i] = 0.0;
-			ch_sum_accumulator_norm[i] = 0.0;
-			ch_sum_accumulator_conv[i] = 0.0;
-		}
+		std::vector<double> sum_and_square_buffer(frames);
+		std::vector<double> c_sum_and_square_buffer(frames);
+		std::vector<double> ch_sum_accumulator_norm(frames);
+		std::vector<double> ch_sum_accumulator_conv(frames);
 
 		for (int ch = 0; ch < _nch; ch++) {
 
-			auto normalized_buffer = new double[frames];
-			auto convolved_buffer = new double[frames];
+			std::vector<double> normalized_buffer(frames);
+			std::vector<double> convolved_buffer(frames);
 
-			for (int n=ch, m= 0; n < _nsamples; n += _nch, m++) {
+			for (int n = ch, m = 0; n < _nsamples; n += _nch, m++) {
 				// use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
 				//so not normalized but calibrated
 				normalized_buffer[m] = _arg_buffer[n] * _chconf[ch]; //this scale amplitude according to specified calibration
@@ -233,9 +225,6 @@ private:
 			accumulatech(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
 			accumulatech(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
 
-			delete[] normalized_buffer;
-			delete[] convolved_buffer;
-
 		} // loop through channels
 
 		//Create a function for this also a tag so that the worker know if he has to do this or not
@@ -248,18 +237,13 @@ private:
 		}
 
 		_sum->sum_samples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
-
-		delete[] sum_and_square_buffer;
-		delete[] c_sum_and_square_buffer;
-		delete[] ch_sum_accumulator_norm;
-		delete[] ch_sum_accumulator_conv;
 	}
 
-	double* _arg_buffer;
+	std::vector<double> _arg_buffer;
 	int _nsamples;
 	int _nch;
 	int _npoints;
-	double* _ir;
+	std::vector<double> const& _ir;
 	Sum* _sum;
 	std::vector<double> _chconf;
 	int _shorttermindex;
@@ -269,14 +253,13 @@ private:
 	std::thread _thread;
 };
 
-int equalinterval(double const * freqsamples, double const * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints);
-int equalinterval2(double const freqsamples[], double const * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
-int convloglin(double * in, double * out, int points);
+int equalinterval(double const * freqsamples, double const * freqresp, std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints);
+int equalinterval2(double const freqsamples[], double const * freqresp, std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
+int convloglin(std::vector<double> const& in, std::vector<double>& out, int points);
 double convlinlog_single(double in);
 double convloglin_single(double in);
 double inputcalib (double dbdiffch);
-void  inversefft1(double * eqfreqresp, double * ir, int npoints);
-void  inversefft2(double * eqfreqresp, double * ir, int npoints);
+void  inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints);
 void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
@@ -543,10 +526,10 @@ Result calculate(
 	double const freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
 	double const freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
 
-	double * eqfreqresp_db = new double[number_of_filter_interpolation_points];
-	double * eqfreqsamples = new double[number_of_filter_interpolation_points];
-	double * eqfreqresp = new double[number_of_filter_interpolation_points];
-	double * ir = new double[number_of_filter_interpolation_points * 2];
+	std::vector<double> eqfreqresp_db(number_of_filter_interpolation_points);
+	std::vector<double> eqfreqsamples(number_of_filter_interpolation_points);
+	std::vector<double> eqfreqresp(number_of_filter_interpolation_points);
+	std::vector<double> ir(number_of_filter_interpolation_points * 2);
 
 	// And what to do for floating point sample coding?
 
@@ -699,11 +682,6 @@ Result calculate(
 
 	sf_close(file);
 
-	delete[] eqfreqsamples;
-	delete[] eqfreqresp_db;
-	delete[] eqfreqresp;
-	delete[] ir;
-
 	delete totsum;
 	delete[] buffer;
 
@@ -757,7 +735,7 @@ Result calculate(
 	//the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
 	//it is also different for the way it interpolates between DC and 31 Hz
 	// Pay attention that also arguments to the functions are changed
-	int equalinterval2(double const freqsamples[], double const freqresp_db[], double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
+	int equalinterval2(double const freqsamples[], double const freqresp_db[], std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
 		double freq;
 
 
@@ -802,7 +780,7 @@ Result calculate(
 
 
 
-	int convloglin(double * in, double * out, int points) {
+	int convloglin(std::vector<double> const& in, std::vector<double>& out, int points) {
 		for (int i = 0; i < points; i++) {
 			out[i] = powf(10, (in[i]/20.0));
 		}
@@ -812,22 +790,18 @@ Result calculate(
 
 
 	double convlinlog_single(double in) {
-		double out;
-		out = log(in)*20.0f;
-		return out;
+		return log(in) * 20.0f;
 	}
 
 
 	double convloglin_single(double in) {
-		double out;
-		out = powf(10, in/20.0f);
-		return out;
+		return powf(10, in / 20.0f);
 	}
 
 	// convolution
 
 
-	void  inversefft2(double * eqfreqresp, double * ir, int npoints) {
+	void  inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints) {
 		for (int n = 0; n < npoints; n++) {
 			double parsum = 0.0;
 			double partial = 0.0;
