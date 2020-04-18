@@ -263,14 +263,13 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int numbershortperiods, int buffersizems, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
 	int npoints = 64; // This value is low for precision. Calibration is done with 32768 point.
 	int origpoints = 21; //number of points in the standard CCIR filter
 	int samplingfreq; // this and the next is defined later taking it from sound file
-	int bitdepth;
 	// double normalizer;
 	int timing = 0;
 	int fileopenstate = 0;
@@ -394,10 +393,10 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(channel_corrections, sound_filename, leqmlog, leqm10, timing, bitdepth, numbershortperiods, buffersizems, numCPU, samplingfreq, npoints, origpoints, leqnw);
+	return calculate(channel_corrections, sound_filename, leqmlog, leqm10, timing, numbershortperiods, buffersizems, numCPU, samplingfreq, npoints, origpoints, leqnw);
 }
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int numbershortperiods, int buffersizems, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
@@ -501,6 +500,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 
 	// And what to do for floating point sample coding?
 
+	int bitdepth = 0;
 	switch(sf_info.format & SF_FORMAT_SUBMASK) {
 		// all signed bitdepth
 		case 0x0001:
