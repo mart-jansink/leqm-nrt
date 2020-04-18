@@ -41,6 +41,9 @@
 #include <sys/sysctl.h
 #endif
 
+#include <vector>
+#include <memory>
+#include <iostream>
 
 // Version 0.0.18 (C) Luca Trisciani 2011-2013, 2017-2018
 // Tool from the DCP-Werkstatt Software Bundle
@@ -65,16 +68,41 @@ struct Sum {
 };
 
 struct WorkerArgs {
-  double * arg_buffer;
-  int nsamples;
-  int nch;
-  int npoints;
-  double * ir;
-  struct Sum * ptrtotsum;
-  double * chconf;
-  int shorttermindex;
-  double * shorttermarray;
-  int leqm10flag;
+	WorkerArgs(double* buffer, int buffer_size_samples, int nsamples_, int nch_, int npoints_, double* ir_, Sum* ptrtotsum_, double* chconf_, int shorttermindex_, double* shorttermarray_, int leqm10flag_)
+		: arg_buffer(new double[buffer_size_samples])
+		, nsamples(nsamples_)
+		, nch(nch_)
+		, npoints(npoints_)
+		, ir(ir_)
+		, ptrtotsum(ptrtotsum_)
+		, chconf(chconf_)
+		, shorttermindex(shorttermindex_)
+		, shorttermarray(shorttermarray_)
+		, leqm10flag(leqm10flag_)
+	{
+		memcpy(arg_buffer, buffer, nsamples * sizeof(double));
+	}
+
+	WorkerArgs(WorkerArgs& other) = delete;
+	bool operator=(WorkerArgs&) = delete;
+	WorkerArgs(WorkerArgs&& other) = delete;
+	bool operator=(WorkerArgs&&) = delete;
+
+	~WorkerArgs()
+	{
+		delete[] arg_buffer;
+	}
+
+	double * arg_buffer;
+	int nsamples;
+	int nch;
+	int npoints;
+	double * ir;
+	struct Sum * ptrtotsum;
+	double * chconf;
+	int shorttermindex;
+	double * shorttermarray;
+	int leqm10flag;
 };
 
 int equalinterval( double * freqsamples, double * freqresp, double * eqfreqsamples, double * eqfreqresp, int points, int samplingfreq, int origpoints);
@@ -439,71 +467,45 @@ int main(int argc, const char ** argv)
 
  int worker_id = 0;
  pthread_t tid[numCPU];
- struct WorkerArgs ** WorkerArgsArray;
- WorkerArgsArray = (WorkerArgs **) malloc(sizeof(struct WorkerArgs *)*numCPU);
+ std::vector<std::shared_ptr<WorkerArgs>> worker_args;
  int staindex = 0; //shorttermarrayindex
 
 
  while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
+	 worker_args.push_back(std::make_shared<WorkerArgs>(
+				 buffer, buffer_size_samples, samples_read, sfinfo.channels, npoints, ir, totsum, channelconfcalvector, leqm10 ? staindex++ : 0, leqm10 ? shorttermaveragedarray : 0, leqm10 ? 1 : 0)
+				 );
 
-   WorkerArgsArray[worker_id] = (WorkerArgs *) malloc(sizeof(struct WorkerArgs));
-   WorkerArgsArray[worker_id]->nsamples = samples_read;
-   WorkerArgsArray[worker_id]->nch = sfinfo.channels;
-   WorkerArgsArray[worker_id]->npoints=npoints;
-   WorkerArgsArray[worker_id]->ir = ir;
-   WorkerArgsArray[worker_id]->ptrtotsum = totsum;
+	 pthread_attr_t attr;
+	 pthread_attr_init(&attr);
+	 pthread_create(&tid[worker_id], &attr, worker_function, worker_args[worker_id].get());
 
-   WorkerArgsArray[worker_id]->chconf = channelconfcalvector;
-   if (leqm10) {
-   WorkerArgsArray[worker_id]->shorttermindex = staindex++;
-   WorkerArgsArray[worker_id]->leqm10flag = 1;
-   WorkerArgsArray[worker_id]->shorttermarray = shorttermaveragedarray;
-   } else {
-     WorkerArgsArray[worker_id]->shorttermindex = 0;
-     WorkerArgsArray[worker_id]->leqm10flag = 0;
-   }
-
-   WorkerArgsArray[worker_id]->arg_buffer = new double[buffer_size_samples];
-   memcpy(WorkerArgsArray[worker_id]->arg_buffer, buffer, samples_read*sizeof(double));
-
-
-   pthread_attr_t attr;
-   pthread_attr_init(&attr);
-   pthread_create(&tid[worker_id], &attr, worker_function, WorkerArgsArray[worker_id]);
-
-   worker_id++;
-   if (worker_id == numCPU) {
-       worker_id = 0;
-       //maybe here wait for all cores to output before going on
-       for (int idxcpu = 0; idxcpu < numCPU; idxcpu++) {
-       pthread_join(tid[idxcpu], NULL);
-       delete[] WorkerArgsArray[idxcpu]->arg_buffer;
-       WorkerArgsArray[idxcpu]->arg_buffer = nullptr;
-       free(WorkerArgsArray[idxcpu]);
-       WorkerArgsArray[idxcpu] = NULL;
-       }
-              //simply log here your measurement it will be a multiple of your threads and your buffer
-       if (leqmlog) {
-	 meanoverduration(totsum); //update leq(m) until now and log it
-       logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sfinfo.samplerate), totsum );
-	       } //endlog
-   }
+	 worker_id++;
+	 if (worker_id == numCPU) {
+		 worker_id = 0;
+		 //maybe here wait for all cores to output before going on
+		 for (int idxcpu = 0; idxcpu < numCPU; idxcpu++) {
+			 pthread_join(tid[idxcpu], NULL);
+		 }
+		 //simply log here your measurement it will be a multiple of your threads and your buffer
+		 if (leqmlog) {
+			 meanoverduration(totsum); //update leq(m) until now and log it
+			 logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sfinfo.samplerate), totsum );
+		 } //endlog
+		 worker_args.clear();
+	 }
 
 
-
-    //end while worker_id
- /// End looping cores
-  } // main loop through file
+	 //end while worker_id
+	 /// End looping cores
+ } // main loop through file
 
  //here I should wait for rest worker (< numcpu)
  //but I need to dispose of thread id.
  if (worker_id != 0) { // worker_id = 0 means the number of samples was divisible through the number of cpus
    for (int idxcpu = 0; idxcpu < worker_id; idxcpu++) { //worker_id is at this point one unit more than threads launched
      pthread_join(tid[idxcpu], NULL);
-     delete[] WorkerArgsArray[idxcpu]->arg_buffer;
-     WorkerArgsArray[idxcpu]->arg_buffer = nullptr;
-     free(WorkerArgsArray[idxcpu]);
-     WorkerArgsArray[idxcpu] = NULL;
+     worker_args.clear();
    }
         //also log here for a last value
        if (leqmlog) {
@@ -591,8 +593,6 @@ int main(int argc, const char ** argv)
  ir = NULL;
  free(channelconfcalvector);
  channelconfcalvector = NULL;
- free(WorkerArgsArray);
- WorkerArgsArray = NULL;
 
  free(totsum);
  totsum = NULL;
@@ -629,7 +629,7 @@ void * worker_function(void * argstruct) {
     for (int n=ch, m= 0; n < thisWorkerArgs->nsamples; n += thisWorkerArgs->nch, m++) {
 	    // use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
 	    //so not normalized but calibrated
-	    normalized_buffer[m] = thisWorkerArgs->arg_buffer[n]*thisWorkerArgs->chconf[ch]; //this scale amplitude according to specified calibration
+	    normalized_buffer[m] = thisWorkerArgs->arg_buffer[n] * thisWorkerArgs->chconf[ch]; //this scale amplitude according to specified calibration
     }
 
  //convolution
@@ -676,8 +676,6 @@ void * worker_function(void * argstruct) {
   delete[] ch_sum_accumulator_conv;
   ch_sum_accumulator_conv = nullptr;
 
-  delete[] thisWorkerArgs->arg_buffer;
-  thisWorkerArgs->arg_buffer = nullptr;
   // the memory pointed to by this pointer is freed in main
   // it is the same memory for all worker
   // but it is necessary to set pointer to NULL otherwise free will not work later (really?)
