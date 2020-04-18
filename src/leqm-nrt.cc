@@ -260,7 +260,7 @@ double convloglin_single(double in);
 double inputcalib (double dbdiffch);
 void  inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints);
 void * worker_function(void * argfunc);
-void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
+void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
 
@@ -568,7 +568,7 @@ Result calculate(
 
 	// read through the entire file
 
-	auto totsum = new Sum();
+	Sum totsum;
 	Result result;
 	sf_count_t samples_read = 0;
 
@@ -587,7 +587,7 @@ Result calculate(
 				sf_info.channels,
 				number_of_filter_interpolation_points,
 				ir,
-				totsum,
+				&totsum,
 				channel_conf_cal,
 				enable_leqm10_log ? staindex++ : 0,
 				enable_leqm10_log ? shorttermaveragedarray : 0,
@@ -602,7 +602,7 @@ Result calculate(
 			worker_args.clear();
 			//simply log here your measurement it will be a multiple of your threads and your buffer
 			if (leqmlogfile) {
-				logleqm(leqmlogfile, ((double) totsum->nsamples())/((double) sf_info.samplerate), totsum);
+				logleqm(leqmlogfile, ((double) totsum.nsamples())/((double) sf_info.samplerate), totsum);
 			} //endlog
 		}
 	}
@@ -612,12 +612,12 @@ Result calculate(
 			worker_args.clear();
 		}
 		if (leqmlogfile) {
-			logleqm(leqmlogfile, ((double) totsum->nsamples())/((double) sf_info.samplerate), totsum );
+			logleqm(leqmlogfile, ((double) totsum.nsamples())/((double) sf_info.samplerate), totsum );
 		}
 	}
 
-	result.leq_nw = totsum->rms();
-	result.leq_m = totsum->leqm();
+	result.leq_nw = totsum.rms();
+	result.leq_m = totsum.leqm();
 
 	if (measure_timing) {
 		struct timespec stoptime;
@@ -679,8 +679,6 @@ Result calculate(
 	}
 
 	sf_close(file);
-
-	delete totsum;
 
 	return result;
 }
@@ -829,11 +827,11 @@ Result calculate(
 		return pow(10, dbdiffch / 20);
 	}
 
-	void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum) {
+	void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum) {
 
 		fprintf(filehandle, "%.4f", featuretimesec);
 		fprintf(filehandle, "\t");
-		fprintf(filehandle, "%.4f\n", oldsum->leqm());
+		fprintf(filehandle, "%.4f\n", oldsum.leqm());
 
 
 	}
