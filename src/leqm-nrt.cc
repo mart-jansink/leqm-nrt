@@ -73,7 +73,7 @@ public:
 		rms = 0.0;
 	}
 
-	void sumsamples(double * inputsamples, double * cinputsamples, int nsamples_)
+	void sum_samples(double * inputsamples, double * cinputsamples, int nsamples_)
 	{
 		_mutex.lock();
 		nsamples += nsamples_;
@@ -82,6 +82,24 @@ public:
 			csum += cinputsamples[i];
 		}
 		_mutex.unlock();
+	}
+
+	void mean_over_duration()
+	{
+		mean = pow(sum / ((double) nsamples), 0.500);
+		cmean = pow(csum / ((double) nsamples), 0.500);
+		rms = 20 * log10(mean) + 108.010299957;
+		leqm = 20 * log10(cmean) + 108.010299957;
+
+		/*
+		   How the final offset is calculated without reference to a test tone:
+		   P0 is the SPL reference 20 uPa
+		   Reference SPL is RMS ! So 85 SPL over 20 uPa is 10^4.25 x 0.000020 = 0.355655882 Pa (RMS),
+		   but Peak value is 0.355655882 x sqr(2) = 0.502973372 that is 20 x log ( 0.502973372 / 0.000020) = 88.010299957
+		   To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957
+		   */
+		/*But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
+		*/
 	}
 
 	double csum; // convolved sum
@@ -228,7 +246,7 @@ private:
 #endif
 		}
 
-		_sum->sumsamples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
+		_sum->sum_samples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
 
 		delete[] sum_and_square_buffer;
 		delete[] c_sum_and_square_buffer;
@@ -256,7 +274,6 @@ int convloglin(double * in, double * out, int points);
 double convlinlog_single(double in);
 double convloglin_single(double in);
 double inputcalib (double dbdiffch);
-int meanoverduration(Sum * oldsum);
 void  inversefft1(double * eqfreqresp, double * ir, int npoints);
 void  inversefft2(double * eqfreqresp, double * ir, int npoints);
 void * worker_function(void * argfunc);
@@ -603,7 +620,7 @@ Result calculate(
 			worker_args.clear();
 			//simply log here your measurement it will be a multiple of your threads and your buffer
 			if (leqmlogfile) {
-				meanoverduration(totsum); //update leq(m) until now and log it
+				totsum->mean_over_duration(); //update leq(m) until now and log it
 				logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 			} //endlog
 		}
@@ -614,12 +631,12 @@ Result calculate(
 			worker_args.clear();
 		}
 		if (leqmlogfile) {
-			meanoverduration(totsum); //update leq(m) until now and log it
+			totsum->mean_over_duration(); //update leq(m) until now and log it
 			logleqm(leqmlogfile, ((double) totsum->nsamples)/((double) sf_info.samplerate), totsum );
 		}
 	}
 
-	meanoverduration(totsum);
+	totsum->mean_over_duration();
 	result.leq_nw = totsum->rms;
 	result.leq_m = totsum->leqm;
 
@@ -838,37 +855,9 @@ Result calculate(
 
 	// scale input according to required calibration
 	// this could be different for certain digital cinema formats
-	double inputcalib (double dbdiffch) {
-
-		double coeff = pow(10, dbdiffch/20);
-		return coeff;
-
-	}
-
-	int initbuffer(double * buffertoinit, int nsamples) {
-		for (int i = 0; i < nsamples; i++) {
-			buffertoinit[i] = 0.0;
-
-		}
-		return 0;
-	}
-
-	int meanoverduration(Sum * oldsum) {
-		oldsum->mean = pow(oldsum->sum / ((double) oldsum->nsamples), 0.500);
-		oldsum->cmean = pow(oldsum->csum / ((double) oldsum->nsamples), 0.500);
-		oldsum->rms = 20*log10(oldsum->mean) + 108.010299957;
-		oldsum->leqm = 20*log10(oldsum->cmean) +  108.010299957;//
-
-		/*
-		   How the final offset is calculated without reference to a test tone:
-		   P0 is the SPL reference 20 uPa
-		   Reference SPL is RMS ! So 85 SPL over 20 uPa is 10^4.25 x 0.000020 = 0.355655882 Pa (RMS),
-		   but Peak value is 0.355655882 x sqr(2) = 0.502973372 that is 20 x log ( 0.502973372 / 0.000020) = 88.010299957
-		   To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957
-		   */
-		/*But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
-		*/
-		return 0;
+	double inputcalib(double dbdiffch)
+	{
+		return pow(10, dbdiffch / 20);
 	}
 
 	void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum) {
