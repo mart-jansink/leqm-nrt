@@ -46,6 +46,7 @@
 #include <iostream>
 #include <thread>
 #include <mutex>
+#include <functional>
 
 // Version 0.0.18 (C) Luca Trisciani 2011-2013, 2017-2018
 // Tool from the DCP-Werkstatt Software Bundle
@@ -289,8 +290,25 @@ struct Result
 };
 
 
-Result calculate(
+Result calculate_file(
 	std::string sound_filename,
+	std::vector<double> channel_corrections,
+	int buffer_size_ms,
+	int number_of_filter_interpolation_points,
+	int num_cpu,
+	bool enable_leqm_log,
+	bool enable_leqm10_log,
+	bool measure_timing
+	);
+
+
+Result calculate_function(
+	std::function<int64_t (double*, int64_t)> get_audio_data,
+	int channels,
+	int sample_rate,
+	int frames,
+	int bits_per_sample,
+	std::string log_prefix,
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
@@ -417,7 +435,7 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	auto result = calculate(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, num_cpu, enable_leqm_log, enable_leqm10_log, measure_timing);
+	auto result = calculate_file(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, num_cpu, enable_leqm_log, enable_leqm10_log, measure_timing);
 
 	if (display_leqnw) {
 		printf("Leq(nW): %.4f\n", result.leq_nw); // Leq(no Weighting)
@@ -427,7 +445,7 @@ int main(int argc, const char ** argv)
 	return result.status;
 }
 
-Result calculate(
+Result calculate_file(
 	std::string sound_filename,
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
@@ -438,90 +456,12 @@ Result calculate(
 	bool measure_timing
 	)
 {
-	struct timespec starttime;
-	double * shorttermaveragedarray = nullptr;
-	int constexpr origpoints = 21; //number of points in the standard CCIR filter
-
 	SF_INFO sf_info;
 	sf_info.format = 0;
 	SNDFILE* file = sf_open(sound_filename.c_str(), SFM_READ, &sf_info);
 	if (!file) {
 		return {-101};
 	}
-
-	std::vector<double> channel_conf_cal;
-
-	//postprocessing parameters
-	if (static_cast<int>(channel_corrections.size()) == sf_info.channels) {
-		for (auto i: channel_corrections) {
-			channel_conf_cal.push_back(convloglin_single(i));
-
-		}
-	} else if (channel_corrections.empty() && sf_info.channels == 6) {
-		double conf51[] = {0, 0, 0, 0, -3, -3};
-		for (auto cind = 0; cind < sf_info.channels; cind++) {
-			channel_conf_cal.push_back(convloglin_single(conf51[cind]));
-		}
-	} else {
-		return {-100};
-	}
-
-	FILE *leqm10logfile = nullptr;
-	if (enable_leqm10_log) {
-		std::string log_filename = sound_filename + ".leqm10.txt";
-		leqm10logfile = fopen(log_filename.c_str(), "w");
-		/* If that failed we just won't get any log */
-	}
-
-	FILE *leqmlogfile = nullptr;
-	if (enable_leqm_log) {
-		std::string log_filename = sound_filename + ".leqmlog.txt";
-		leqmlogfile = fopen(log_filename.c_str(), "w");
-		/* If that failed we just won't get any log */
-	}
-
-	if (measure_timing) {
-		clock_gettime(CLOCK_MONOTONIC, &starttime);
-	}
-
-	if ((sf_info.samplerate * buffer_size_ms) % 1000) {
-		return -102;
-	}
-
-	int buffer_size_samples = (sf_info.samplerate * sf_info.channels * buffer_size_ms) / 1000;
-	std::vector<double> buffer(buffer_size_samples);
-
-	int numbershortperiods = 0;
-	if (enable_leqm10_log) {
-		//if duration < 10 mm exit
-		double featdursec = sf_info.frames / sf_info.samplerate;
-		if ((featdursec/60.0) < 10.0) {
-			printf("The audio file is too short to measure Leq(m10).\n");
-			return 0;
-		}
-
-		//how many short periods in overall duration
-		int remainder = sf_info.frames % (sf_info.samplerate*buffer_size_ms/1000);
-		if (remainder == 0) {
-			numbershortperiods = sf_info.frames/(sf_info.samplerate*buffer_size_ms/1000);
-		} else {
-			numbershortperiods = sf_info.frames/(sf_info.samplerate*buffer_size_ms/1000) + 1;
-		}
-
-		shorttermaveragedarray = (double *) malloc(sizeof(*shorttermaveragedarray)*numbershortperiods);
-	}
-
-	//ISO 21727:2004(E)
-	// M Weighting
-	double const freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
-	double const freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
-
-	std::vector<double> eqfreqresp_db(number_of_filter_interpolation_points);
-	std::vector<double> eqfreqsamples(number_of_filter_interpolation_points);
-	std::vector<double> eqfreqresp(number_of_filter_interpolation_points);
-	std::vector<double> ir(number_of_filter_interpolation_points * 2);
-
-	// And what to do for floating point sample coding?
 
 	int bitdepth = 0;
 	switch(sf_info.format & SF_FORMAT_SUBMASK) {
@@ -543,10 +483,123 @@ Result calculate(
 			return -1;
 	}
 
+	auto result = calculate_function(
+		[file](double* buffer, int64_t samples) -> int64_t {
+			return sf_read_double(file, buffer, samples);
+		},
+		sf_info.channels,
+		sf_info.samplerate,
+		sf_info.frames,
+		bitdepth,
+		sound_filename,
+		channel_corrections,
+		buffer_size_ms,
+		number_of_filter_interpolation_points,
+		num_cpu,
+		enable_leqm_log,
+		enable_leqm10_log,
+		measure_timing
+		);
+
+	sf_close(file);
+
+	return result;
+}
 
 
+Result calculate_function(
+	std::function<int64_t (double*, int64_t)> get_audio_data,
+	int channels,
+	int sample_rate,
+	int frames,
+	int bits_per_sample,
+	std::string log_prefix,
+	std::vector<double> channel_corrections,
+	int buffer_size_ms,
+	int number_of_filter_interpolation_points,
+	int num_cpu,
+	bool enable_leqm_log,
+	bool enable_leqm10_log,
+	bool measure_timing
+	)
+{
+	struct timespec starttime;
+	double * shorttermaveragedarray = nullptr;
+	int constexpr origpoints = 21; //number of points in the standard CCIR filter
 
-	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, sf_info.samplerate, origpoints, bitdepth);
+	std::vector<double> channel_conf_cal;
+
+	//postprocessing parameters
+	if (static_cast<int>(channel_corrections.size()) == channels) {
+		for (auto i: channel_corrections) {
+			channel_conf_cal.push_back(convloglin_single(i));
+
+		}
+	} else if (channel_corrections.empty() && channels == 6) {
+		double conf51[] = {0, 0, 0, 0, -3, -3};
+		for (auto cind = 0; cind < channels; cind++) {
+			channel_conf_cal.push_back(convloglin_single(conf51[cind]));
+		}
+	} else {
+		return {-100};
+	}
+
+	FILE *leqm10logfile = nullptr;
+	if (enable_leqm10_log) {
+		std::string log_filename = log_prefix + ".leqm10.txt";
+		leqm10logfile = fopen(log_filename.c_str(), "w");
+		/* If that failed we just won't get any log */
+	}
+
+	FILE *leqmlogfile = nullptr;
+	if (enable_leqm_log) {
+		std::string log_filename = log_prefix + ".leqmlog.txt";
+		leqmlogfile = fopen(log_filename.c_str(), "w");
+		/* If that failed we just won't get any log */
+	}
+
+	if (measure_timing) {
+		clock_gettime(CLOCK_MONOTONIC, &starttime);
+	}
+
+	if ((sample_rate * buffer_size_ms) % 1000) {
+		return -102;
+	}
+
+	int buffer_size_samples = (sample_rate * channels * buffer_size_ms) / 1000;
+	std::vector<double> buffer(buffer_size_samples);
+
+	int numbershortperiods = 0;
+	if (enable_leqm10_log) {
+		//if duration < 10 mm exit
+		double featdursec = frames / sample_rate;
+		if ((featdursec/60.0) < 10.0) {
+			printf("The audio file is too short to measure Leq(m10).\n");
+			return 0;
+		}
+
+		//how many short periods in overall duration
+		int remainder = frames % (sample_rate*buffer_size_ms/1000);
+		if (remainder == 0) {
+			numbershortperiods = frames/(sample_rate*buffer_size_ms/1000);
+		} else {
+			numbershortperiods = frames/(sample_rate*buffer_size_ms/1000) + 1;
+		}
+
+		shorttermaveragedarray = (double *) malloc(sizeof(*shorttermaveragedarray)*numbershortperiods);
+	}
+
+	//ISO 21727:2004(E)
+	// M Weighting
+	double const freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
+	double const freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
+
+	std::vector<double> eqfreqresp_db(number_of_filter_interpolation_points);
+	std::vector<double> eqfreqsamples(number_of_filter_interpolation_points);
+	std::vector<double> eqfreqresp(number_of_filter_interpolation_points);
+	std::vector<double> ir(number_of_filter_interpolation_points * 2);
+
+	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, sample_rate, origpoints, bits_per_sample);
 	convloglin(eqfreqresp_db, eqfreqresp, number_of_filter_interpolation_points);
 
 #ifdef DEBUG
@@ -570,12 +623,12 @@ Result calculate(
 	int staindex = 0; //shorttermarrayindex
 
 
-	while((samples_read = sf_read_double(file, buffer.data(), buffer_size_samples)) > 0) {
+	while ((samples_read = get_audio_data(buffer.data(), buffer_size_samples)) > 0) {
 		worker_args.push_back(
 			std::make_shared<Worker>(
 				buffer,
 				samples_read,
-				sf_info.channels,
+				channels,
 				number_of_filter_interpolation_points,
 				ir,
 				&totsum,
@@ -593,7 +646,7 @@ Result calculate(
 			worker_args.clear();
 			//simply log here your measurement it will be a multiple of your threads and your buffer
 			if (leqmlogfile) {
-				logleqm(leqmlogfile, ((double) totsum.nsamples())/((double) sf_info.samplerate), totsum);
+				logleqm(leqmlogfile, ((double) totsum.nsamples())/((double) sample_rate), totsum);
 			} //endlog
 		}
 	}
@@ -603,7 +656,7 @@ Result calculate(
 			worker_args.clear();
 		}
 		if (leqmlogfile) {
-			logleqm(leqmlogfile, ((double) totsum.nsamples())/((double) sf_info.samplerate), totsum );
+			logleqm(leqmlogfile, ((double) totsum.nsamples())/((double) sample_rate), totsum );
 		}
 	}
 
@@ -668,8 +721,6 @@ Result calculate(
 	if (leqmlogfile) {
 		fclose(leqmlogfile);
 	}
-
-	sf_close(file);
 
 	return result;
 }
