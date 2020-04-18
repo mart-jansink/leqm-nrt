@@ -427,7 +427,6 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 		for (auto cind = 0; cind < sf_info.channels; cind++) {
 			channel_conf_cal.push_back(convloglin_single(conf51[cind]));
 		}
-
 	} else {
 		printf("Either you specified a different number of calibration than number of channels in the file or you do not indicate any calibration and the program cannot infer one from the number of channels. Please specify a channel calibration on the command line.\n");
 		return 0;
@@ -455,12 +454,7 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 	}
 
 	// reading to a double or float buffer with sndfile take care of normalization
-	/*
-   	static double  buffer[BUFFER_LEN]; // it seems this must be static. I don't know why
-   	*/
 	double * buffer;
-	// buffer = new double [BUFFER_LEN];
-	//buffer_size_samples = (sf_info.samplerate*sf_info.channels*buffersizems)/1000;
 	if ((sf_info.samplerate*buffersizems)%1000) {
 		printf("Please fine tune the buffersize according to the sample rate\n");
 		//close file
@@ -501,16 +495,10 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 	double freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
 	double freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
 
-	double * eqfreqresp_db;
-	eqfreqresp_db = (double *) malloc(sizeof(*eqfreqresp_db)*npoints);
-
-	double * eqfreqsamples;
-	eqfreqsamples = (double *) malloc(sizeof(*eqfreqsamples)*npoints);
-	double * eqfreqresp;
-	eqfreqresp = (double *) malloc(sizeof(*eqfreqresp)*npoints);
-	double * ir;
-	ir = (double *) malloc(sizeof(*ir)*npoints*2);
-
+	double * eqfreqresp_db = new double[npoints];
+	double * eqfreqsamples = new double[npoints];
+	double * eqfreqresp = new double[npoints];
+	double * ir = new double[npoints * 2];
 
 	// And what to do for floating point sample coding?
 
@@ -662,19 +650,13 @@ int calculate(std::vector<double> channel_corrections, std::string sound_filenam
 
 	sf_close(file);
 
-	free(eqfreqsamples);
-	eqfreqsamples = NULL;
-	free(eqfreqresp_db);
-	eqfreqresp_db=NULL;
-	free(eqfreqresp);
-	eqfreqresp = NULL;
-	free(ir);
-	ir = NULL;
+	delete[] eqfreqsamples;
+	delete[] eqfreqresp_db;
+	delete[] eqfreqresp;
+	delete[] ir;
 
-	free(totsum);
-	totsum = NULL;
+	delete totsum;
 	delete[] buffer;
-	buffer = nullptr;
 }
 
 
