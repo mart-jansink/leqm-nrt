@@ -263,13 +263,24 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int number_of_filter_interpolation_points, bool display_leqnw);
+
+int calculate(
+	std::string sound_filename,
+	std::vector<double> channel_corrections,
+	int buffersizems,
+	int number_of_filter_interpolation_points,
+	int numCPU,
+	bool display_leqnw,
+	bool enable_leqm_log,
+	bool enable_leqm10_log,
+	bool measure_timing
+	);
+
 
 int main(int argc, const char ** argv)
 {
 	int number_of_filter_interpolation_points = 64; // This value is low for precision. Calibration is done with 32768 point.
 	bool measure_timing = false;
-	int fileopenstate = 0;
 	bool enable_leqm10_log = false;
 	bool enable_leqm_log = false;
 #if defined __unix__ || defined  __APPLE__
@@ -389,10 +400,20 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(channel_corrections, sound_filename, enable_leqm_log, enable_leqm10_log, measure_timing, buffersizems, numCPU, number_of_filter_interpolation_points, display_leqnw);
+	return calculate(sound_filename, channel_corrections, buffersizems, number_of_filter_interpolation_points, numCPU, display_leqnw, enable_leqm_log, enable_leqm10_log, measure_timing);
 }
 
-int calculate(std::vector<double> channel_corrections, std::string sound_filename, bool enable_leqm_log, bool enable_leqm10_log, bool measure_timing, int buffersizems, int numCPU, int number_of_filter_interpolation_points, bool display_leqnw)
+int calculate(
+	std::string sound_filename,
+	std::vector<double> channel_corrections,
+	int buffersizems,
+	int number_of_filter_interpolation_points,
+	int numCPU,
+	bool display_leqnw,
+	bool enable_leqm_log,
+	bool enable_leqm10_log,
+	bool measure_timing
+	)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
