@@ -99,7 +99,7 @@ private:
 class Worker
 {
 public:
-	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* sum, double* chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
+	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, double* ir, Sum* sum, std::vector<double> chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
 		: _arg_buffer(new double[buffer_size_samples])
 		, _nsamples(nsamples)
 		, _nch(nch)
@@ -242,7 +242,7 @@ private:
 	int _npoints;
 	double* _ir;
 	Sum* _sum;
-	double* _chconf;
+	std::vector<double> _chconf;
 	int _shorttermindex;
 	double* _shorttermarray;
 	int _leqm10flag;
@@ -263,7 +263,7 @@ void * worker_function(void * argfunc);
 void logleqm(FILE * filehandle, double featuretimesec, Sum * oldsum);
 void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
-int calculate(int numcalread, std::string sound_filename, double* tempchcal, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw);
 
 int main(int argc, const char ** argv)
 {
@@ -288,15 +288,11 @@ int main(int argc, const char ** argv)
 	//SndfileHandle file;
 	int buffersizems = 850; //ISO 21727:2004 do not contain any indication, TASA seems to indicate 1000, p. 8
 	int buffer_size_samples;
-	double tempchcal[128];
-	int numcalread = 0;
+	std::vector<double> channel_corrections;
 	int numbershortperiods = 0;
 	int parameterstate = 0;
 	int leqnw = 0;
 	std::string sound_filename;
-
-	char soundfilename[1024];
-	// This is a requirement of sndfile library, do not forget it.
 
 	if (argc == 1)
 	{ const char helptext[] = "Order of parameters is free.\nPossible parameters are:\n-convpoints <integer number> \tNumber of interpolation points for the filter. Default 64\n-numcpus <integer number> \tNumber of slave threads to speed up operation.\n-timing \t\t\tFor benchmarking speed.\n-leqnw\t Print out Leq without M Weighting\n-chconfcal <db correction> <db correction> <etc. so many times as channels>\n-logleqm10\n-logleqm\n-buffersize <milliseconds>\n";
@@ -304,7 +300,6 @@ int main(int argc, const char ** argv)
 		printf("Please indicate a sound file to be processed.\n");
 		return 0;
 	}
-
 
 	for (int in = 1; in < argc;) {
 
@@ -325,9 +320,8 @@ int main(int argc, const char ** argv)
 			in++;
 			for (;;)  {
 				if (in < argc) {
-					//if (!(strncmp(argv[in], "-", 1) == 0)) { //changed this to allow negative numbers
 					if (!(strncmp(argv[in], "-", 1) == 0) || isdigit(argv[in][1])) {
-						tempchcal[numcalread++]=atof(argv[in++]);
+						channel_corrections.push_back(atof(argv[in++]));
 					} else break;
 				} else break;
 
@@ -401,10 +395,10 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	return calculate(numcalread, sound_filename, tempchcal, leqmlog, leqm10, timing, bitdepth, numbershortperiods, buffersizems, buffer_size_samples, numCPU, samplingfreq, npoints, origpoints, leqnw);
+	return calculate(channel_corrections, sound_filename, leqmlog, leqm10, timing, bitdepth, numbershortperiods, buffersizems, buffer_size_samples, numCPU, samplingfreq, npoints, origpoints, leqnw);
 }
 
-int calculate(int numcalread, std::string sound_filename, double* tempchcal, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
+int calculate(std::vector<double> channel_corrections, std::string sound_filename, int leqmlog, int leqm10, int timing, int bitdepth, int numbershortperiods, int buffersizems, int buffer_size_samples, int numCPU, int samplingfreq, int npoints, int origpoints, int leqnw)
 {
 	FILE *leqm10logfile = nullptr;
 	FILE *leqmlogfile = nullptr;
@@ -420,26 +414,22 @@ int calculate(int numcalread, std::string sound_filename, double* tempchcal, int
 		return 1;
 	}
 
-	double* channelconfcalvector = new double[sf_info.channels];
+	std::vector<double> channel_conf_cal;
 
 	//postprocessing parameters
-	if (numcalread == sf_info.channels) {
-		for (int cind = 0; cind < sf_info.channels; cind++) {
-			channelconfcalvector[cind] = convloglin_single(tempchcal[cind]);
+	if (static_cast<int>(channel_corrections.size()) == sf_info.channels) {
+		for (auto i: channel_corrections) {
+			channel_conf_cal.push_back(convloglin_single(i));
 
 		}
-	}
-	else if ((numcalread == 0) && (sf_info.channels == 6)) {
-		double conf51[6] = {0, 0, 0, 0, -3, -3};
-		for (int cind = 0; cind < sf_info.channels; cind++) {
-			channelconfcalvector[cind] = convloglin_single(conf51[cind]);
+	} else if (channel_corrections.empty() && sf_info.channels == 6) {
+		double conf51[] = {0, 0, 0, 0, -3, -3};
+		for (auto cind = 0; cind < sf_info.channels; cind++) {
+			channel_conf_cal.push_back(convloglin_single(conf51[cind]));
 		}
 
 	} else {
-
 		printf("Either you specified a different number of calibration than number of channels in the file or you do not indicate any calibration and the program cannot infer one from the number of channels. Please specify a channel calibration on the command line.\n");
-
-		delete[] channelconfcalvector;
 		return 0;
 	}
 
@@ -571,7 +561,7 @@ int calculate(int numcalread, std::string sound_filename, double* tempchcal, int
 
 	while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
 		worker_args.push_back(std::make_shared<Worker>(
-					buffer, buffer_size_samples, samples_read, sf_info.channels, npoints, ir, totsum, channelconfcalvector, leqm10 ? staindex++ : 0, leqm10 ? shorttermaveragedarray : 0, leqm10 ? 1 : 0)
+					buffer, buffer_size_samples, samples_read, sf_info.channels, npoints, ir, totsum, channel_conf_cal, leqm10 ? staindex++ : 0, leqm10 ? shorttermaveragedarray : 0, leqm10 ? 1 : 0)
 				);
 		worker_id++;
 
@@ -680,8 +670,6 @@ int calculate(int numcalread, std::string sound_filename, double* tempchcal, int
 	eqfreqresp = NULL;
 	free(ir);
 	ir = NULL;
-	free(channelconfcalvector);
-	channelconfcalvector = NULL;
 
 	free(totsum);
 	totsum = NULL;
