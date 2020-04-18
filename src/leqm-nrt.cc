@@ -112,7 +112,7 @@ private:
 class Worker
 {
 public:
-	Worker(std::vector<double> buffer, int nsamples, int nch, int npoints, std::vector<double> const& ir, Sum* sum, std::vector<double> chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
+	Worker(std::vector<double> buffer, int nsamples, int nch, int npoints, std::vector<double> const& ir, Sum* sum, std::vector<double> chconf)
 		: _buffer(buffer)
 		, _nsamples(nsamples)
 		, _nch(nch)
@@ -120,9 +120,6 @@ public:
 		, _ir(ir)
 		, _sum(sum)
 		, _chconf(chconf)
-		, _shorttermindex(shorttermindex)
-		, _shorttermarray(shorttermarray)
-		, _leqm10flag(leqm10flag)
 	{
 		_thread = std::thread(&Worker::process, this);
 	}
@@ -216,15 +213,6 @@ private:
 			accumulate_ch(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
 			accumulate_ch(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
 
-		} // loop through channels
-
-		//Create a function for this also a tag so that the worker know if he has to do this or not
-
-		if (_leqm10flag) {
-			_shorttermarray[_shorttermindex] = sum_and_short_term_avrg(ch_sum_accumulator_conv, frames);
-#ifdef DEBUG
-			printf("%d: %.6f\n", _shorttermindex, _shorttermarray[_shorttermindex]);
-#endif
 		}
 
 		_sum->sum_samples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
@@ -237,9 +225,6 @@ private:
 	std::vector<double> const& _ir;
 	Sum* _sum;
 	std::vector<double> _chconf;
-	int _shorttermindex;
-	double* _shorttermarray;
-	int _leqm10flag;
 
 	std::thread _thread;
 };
@@ -251,8 +236,6 @@ double convlinlog_single(double in);
 double convloglin_single(double in);
 double inputcalib (double dbdiffch);
 void  inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints);
-void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum);
-void logleqm10(FILE * filehandle, double featuretimesec, double longaverage);
 
 
 Result calculate_file(
@@ -260,10 +243,7 @@ Result calculate_file(
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
-	int num_cpu,
-	bool enable_leqm_log,
-	bool enable_leqm10_log,
-	bool measure_timing
+	int num_cpu
 	)
 {
 	SF_INFO sf_info;
@@ -299,16 +279,11 @@ Result calculate_file(
 		},
 		sf_info.channels,
 		sf_info.samplerate,
-		sf_info.frames,
 		bitdepth,
-		sound_filename,
 		channel_corrections,
 		buffer_size_ms,
 		number_of_filter_interpolation_points,
-		num_cpu,
-		enable_leqm_log,
-		enable_leqm10_log,
-		measure_timing
+		num_cpu
 		);
 
 	sf_close(file);
@@ -321,20 +296,13 @@ Result calculate_function(
 	std::function<int64_t (double*, int64_t)> get_audio_data,
 	int channels,
 	int sample_rate,
-	int frames,
 	int bits_per_sample,
-	std::string log_prefix,
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
-	int num_cpu,
-	bool enable_leqm_log,
-	bool enable_leqm10_log,
-	bool measure_timing
+	int num_cpu
 	)
 {
-	struct timespec starttime;
-	double * shorttermaveragedarray = nullptr;
 	int constexpr origpoints = 21; //number of points in the standard CCIR filter
 
 	std::vector<double> channel_conf_cal;
@@ -354,24 +322,6 @@ Result calculate_function(
 		return {-100};
 	}
 
-	FILE *leqm10logfile = nullptr;
-	if (enable_leqm10_log) {
-		std::string log_filename = log_prefix + ".leqm10.txt";
-		leqm10logfile = fopen(log_filename.c_str(), "w");
-		/* If that failed we just won't get any log */
-	}
-
-	FILE *leqmlogfile = nullptr;
-	if (enable_leqm_log) {
-		std::string log_filename = log_prefix + ".leqmlog.txt";
-		leqmlogfile = fopen(log_filename.c_str(), "w");
-		/* If that failed we just won't get any log */
-	}
-
-	if (measure_timing) {
-		clock_gettime(CLOCK_MONOTONIC, &starttime);
-	}
-
 	if ((sample_rate * buffer_size_ms) % 1000) {
 		return -102;
 	}
@@ -379,25 +329,6 @@ Result calculate_function(
 	int buffer_size_samples = (sample_rate * channels * buffer_size_ms) / 1000;
 	std::vector<double> buffer(buffer_size_samples);
 
-	int numbershortperiods = 0;
-	if (enable_leqm10_log) {
-		//if duration < 10 mm exit
-		double featdursec = frames / sample_rate;
-		if ((featdursec/60.0) < 10.0) {
-			printf("The audio file is too short to measure Leq(m10).\n");
-			return 0;
-		}
-
-		//how many short periods in overall duration
-		int remainder = frames % (sample_rate*buffer_size_ms/1000);
-		if (remainder == 0) {
-			numbershortperiods = frames/(sample_rate*buffer_size_ms/1000);
-		} else {
-			numbershortperiods = frames/(sample_rate*buffer_size_ms/1000) + 1;
-		}
-
-		shorttermaveragedarray = (double *) malloc(sizeof(*shorttermaveragedarray)*numbershortperiods);
-	}
 
 	//ISO 21727:2004(E)
 	// M Weighting
@@ -430,8 +361,6 @@ Result calculate_function(
 
 	int worker_id = 0;
 	std::vector<std::shared_ptr<Worker>> worker_args;
-	int staindex = 0; //shorttermarrayindex
-
 
 	while ((samples_read = get_audio_data(buffer.data(), buffer_size_samples)) > 0) {
 		worker_args.push_back(
@@ -442,10 +371,7 @@ Result calculate_function(
 				number_of_filter_interpolation_points,
 				ir,
 				&totsum,
-				channel_conf_cal,
-				enable_leqm10_log ? staindex++ : 0,
-				enable_leqm10_log ? shorttermaveragedarray : 0,
-				enable_leqm10_log ? 1 : 0
+				channel_conf_cal
 				)
 			);
 
@@ -454,10 +380,6 @@ Result calculate_function(
 		if (worker_id == num_cpu) {
 			worker_id = 0;
 			worker_args.clear();
-			//simply log here your measurement it will be a multiple of your threads and your buffer
-			if (leqmlogfile) {
-				logleqm(leqmlogfile, ((double) totsum.nsamples())/((double) sample_rate), totsum);
-			} //endlog
 		}
 	}
 
@@ -465,72 +387,10 @@ Result calculate_function(
 		for (int idxcpu = 0; idxcpu < worker_id; idxcpu++) { //worker_id is at this point one unit more than threads launched
 			worker_args.clear();
 		}
-		if (leqmlogfile) {
-			logleqm(leqmlogfile, ((double) totsum.nsamples())/((double) sample_rate), totsum );
-		}
 	}
 
 	result.leq_nw = totsum.rms();
 	result.leq_m = totsum.leqm();
-
-	if (measure_timing) {
-		struct timespec stoptime;
-		long stoptimenanoseconds;
-		long executionnanoseconds;
-		clock_gettime(CLOCK_MONOTONIC, &stoptime);
-
-		if (stoptime.tv_nsec < starttime.tv_nsec) {
-			stoptimenanoseconds = 1000000000 + stoptime.tv_nsec;
-		} else {
-			stoptimenanoseconds = stoptime.tv_nsec;
-		}
-		executionnanoseconds = stoptimenanoseconds - starttime.tv_nsec;
-		printf("Total execution time is %.6f seconds\n", ((double) stoptime.tv_sec) - ((double) starttime.tv_sec) + ((double) executionnanoseconds / 1000000000.00));
-	}
-
-
-	if (leqm10logfile) {
-
-		//Take the array with the short term accumulators
-		double interval = 10.0;
-		//create a rolling average according to rolling interval
-		int rollint; // in short 10*60 = 600 sec 600/0.850
-
-
-		//how many element of the array to consider for the rollint?
-		//that is how many buffer_size_ms in the interval - interval could be parameterized(?)
-		double tempint = 60.0 * interval / (((double) buffer_size_ms) /1000.0);
-		rollint = (int) tempint;
-		//dispose of the rest
-		if (tempint - ((double) rollint) > 0) {
-			rollint += 1;
-		}
-		//two loops
-		//external loop
-		int indexlong = 0;
-		while(indexlong < (numbershortperiods - rollint)) {
-
-			double accumulator = 0;
-			//internal loop
-			double averagedaccumulator = 0;
-			for (int indexshort = 0; indexshort < rollint; indexshort++) {
-
-				accumulator += shorttermaveragedarray[indexshort+indexlong];
-			} //end internal loop
-			averagedaccumulator = accumulator/((double) rollint);
-			logleqm10(leqm10logfile, ((double) (indexlong+rollint)) * ((double) buffer_size_ms / 1000.0), averagedaccumulator);
-			indexlong++;
-		} //end external loop
-
-		fclose(leqm10logfile);
-		free(shorttermaveragedarray);
-		shorttermaveragedarray = NULL;
-	}
-
-
-	if (leqmlogfile) {
-		fclose(leqmlogfile);
-	}
 
 	return result;
 }
@@ -625,18 +485,4 @@ void inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir,
 double inputcalib(double dbdiffch)
 {
 	return pow(10, dbdiffch / 20);
-}
-
-void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum) {
-
-	fprintf(filehandle, "%.4f", featuretimesec);
-	fprintf(filehandle, "\t");
-	fprintf(filehandle, "%.4f\n", oldsum.leqm());
-}
-
-void logleqm10(FILE * filehandle, double featuretimesec, double longaverage) {
-	double leqm10 = 20*log10(pow(longaverage, 0.500)) +  108.010299957;
-	fprintf(filehandle, "%.4f", featuretimesec);
-	fprintf(filehandle, "\t");
-	fprintf(filehandle, "%.4f\n", leqm10);
 }

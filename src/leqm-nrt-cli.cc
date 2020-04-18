@@ -55,9 +55,6 @@
 int main(int argc, const char ** argv)
 {
 	int number_of_filter_interpolation_points = 64; // This value is low for precision. Calibration is done with 32768 point.
-	bool measure_timing = false;
-	bool enable_leqm10_log = false;
-	bool enable_leqm_log = false;
 	int num_cpu = std::thread::hardware_concurrency() - 1;
 
 	printf("leqm-nrt  Copyright (C) 2011-2013, 2017-2018 Luca Trisciani\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the GPL v3 licence.\nProgram will use 1 + %d slave threads.\n", num_cpu);
@@ -124,28 +121,6 @@ int main(int argc, const char ** argv)
 			continue;
 
 		}
-		if (strcmp(argv[in], "-timing") == 0) {
-			measure_timing = true;
-			in++;
-			printf("Execution time will be measured.\n");
-			continue;
-
-		}
-
-		if (strcmp(argv[in], "-logleqm10") == 0) {
-			enable_leqm10_log = 1;
-			in++;
-			printf("Leq(M)10 data will be logged to the file leqm10.txt\n");
-			continue;
-
-		}
-		if (strcmp(argv[in], "-logleqm") == 0) {
-			enable_leqm_log = true;
-			in++;
-			printf("Leq(M) data will be logged to the file leqmlog.txt\n");
-			continue;
-
-		}
 
 		if (strcmp(argv[in], "-leqnw") == 0) {
 			display_leqnw = true;
@@ -168,7 +143,7 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	auto result = calculate_file(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, num_cpu, enable_leqm_log, enable_leqm10_log, measure_timing);
+	auto result = calculate_file(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, num_cpu);
 
 	if (display_leqnw) {
 		printf("Leq(nW): %.4f\n", result.leq_nw); // Leq(no Weighting)

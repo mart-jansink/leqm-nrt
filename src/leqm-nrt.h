@@ -35,10 +35,7 @@ Result calculate_file(
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
-	int num_cpu,
-	bool enable_leqm_log,
-	bool enable_leqm10_log,
-	bool measure_timing
+	int num_cpu
 	);
 
 
@@ -46,16 +43,11 @@ Result calculate_function(
 	std::function<int64_t (double*, int64_t)> get_audio_data,
 	int channels,
 	int sample_rate,
-	int frames,
 	int bits_per_sample,
-	std::string log_prefix,
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
 	int number_of_filter_interpolation_points,
-	int num_cpu,
-	bool enable_leqm_log,
-	bool enable_leqm10_log,
-	bool measure_timing
+	int num_cpu
 	);
 
 
