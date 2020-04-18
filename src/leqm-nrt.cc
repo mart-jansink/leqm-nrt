@@ -681,119 +681,115 @@ Result calculate(
 }
 
 
-	//the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
-	//it is also different for the way it interpolates between DC and 31 Hz
-	// Pay attention that also arguments to the functions are changed
-	int equalinterval2(double const freqsamples[], double const freqresp_db[], std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
-		double freq;
+//the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
+//it is also different for the way it interpolates between DC and 31 Hz
+// Pay attention that also arguments to the functions are changed
+int equalinterval2(double const freqsamples[], double const freqresp_db[], std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
+	double freq;
 
 
-		//calculate miminum attenuation depending on the bitdeph (minus one), that is −6.020599913 dB per bit in eccess to sign
-		double dcatt = ((double) (bitdepthsoundfile - 1))*(-6.020599913) + 20.00; //in dB
-		//double dcatt = -90.3;
-		double pass = ((double) (samplingfreq >> 1)) / ((double) points);
-		for (int ieq = 0, i = 0; ieq < points; ieq++) {
-			freq = ieq*pass;
-			eqfreqsamples[ieq] = freq;
+	//calculate miminum attenuation depending on the bitdeph (minus one), that is −6.020599913 dB per bit in eccess to sign
+	double dcatt = ((double) (bitdepthsoundfile - 1))*(-6.020599913) + 20.00; //in dB
+	//double dcatt = -90.3;
+	double pass = ((double) (samplingfreq >> 1)) / ((double) points);
+	for (int ieq = 0, i = 0; ieq < points; ieq++) {
+		freq = ieq*pass;
+		eqfreqsamples[ieq] = freq;
 
-			if (freq == 0.0) {
-				eqfreqresp[ieq] = dcatt;
-			} else if (freq < freqsamples[0]) { // this has a lot of influence on final Leq(M) value
-				eqfreqresp[ieq] = ((freqresp_db[0] - dcatt) / (freqsamples[0] - 0)) * freq + dcatt;
-				//eqfreqresp[ieq] = freqresp_db[0]; // Is this meaningful? Shouldn't I interpolate between 0 Hz and 31 Hz? Otherwise for DC I have -35.5 dB
-				continue;
-			} else {
+		if (freq == 0.0) {
+			eqfreqresp[ieq] = dcatt;
+		} else if (freq < freqsamples[0]) { // this has a lot of influence on final Leq(M) value
+			eqfreqresp[ieq] = ((freqresp_db[0] - dcatt) / (freqsamples[0] - 0)) * freq + dcatt;
+			//eqfreqresp[ieq] = freqresp_db[0]; // Is this meaningful? Shouldn't I interpolate between 0 Hz and 31 Hz? Otherwise for DC I have -35.5 dB
+			continue;
+		} else {
 
-				if ((freq >= freqsamples[i]) && (freq < freqsamples[i+1])) {
-					eqfreqresp[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq - freqsamples[i]) + freqresp_db[i];
-				} else if (freq >=freqsamples[i+1]) {
-					while(freq >= freqsamples[i+1]) {
-						i++;
-						if ((i + 1) >= origpoints) {
-							break;
-						}
+			if ((freq >= freqsamples[i]) && (freq < freqsamples[i+1])) {
+				eqfreqresp[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq - freqsamples[i]) + freqresp_db[i];
+			} else if (freq >=freqsamples[i+1]) {
+				while(freq >= freqsamples[i+1]) {
+					i++;
+					if ((i + 1) >= origpoints) {
+						break;
 					}
-					if ((i+1) < origpoints) {
-						eqfreqresp[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
-					} else {
-						eqfreqresp[ieq] = ((1 - freqresp_db[i])/(((double) (samplingfreq >> 1)) - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
-					}
+				}
+				if ((i+1) < origpoints) {
+					eqfreqresp[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
+				} else {
+					eqfreqresp[ieq] = ((1 - freqresp_db[i])/(((double) (samplingfreq >> 1)) - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
 				}
 			}
 		}
-		return 0;
+	}
+	return 0;
+}
+
+
+int convloglin(std::vector<double> const& in, std::vector<double>& out, int points) {
+	for (int i = 0; i < points; i++) {
+		out[i] = powf(10, (in[i]/20.0));
 	}
 
+	return 0;
+}
 
 
+double convlinlog_single(double in) {
+	return log(in) * 20.0f;
+}
 
 
+double convloglin_single(double in) {
+	return powf(10, in / 20.0f);
+}
 
-	int convloglin(std::vector<double> const& in, std::vector<double>& out, int points) {
-		for (int i = 0; i < points; i++) {
-			out[i] = powf(10, (in[i]/20.0));
+// convolution
+
+
+void inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints) {
+	for (int n = 0; n < npoints; n++) {
+		double parsum = 0.0;
+		double partial = 0.0;
+
+		for (int m = 1; m <= npoints -1; m++) {
+			partial = cos(2.0*M_PI*((double) m)*( ( ((double) n) - ( ((double) npoints) * 2.0 -1 ) / 2 ) / ( ((double) npoints) * 2.0) ));
+			parsum = parsum + eqfreqresp[m]*partial;
 		}
-
-		return 0;
-	}
-
-
-	double convlinlog_single(double in) {
-		return log(in) * 20.0f;
-	}
-
-
-	double convloglin_single(double in) {
-		return powf(10, in / 20.0f);
-	}
-
-	// convolution
-
-
-	void  inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints) {
-		for (int n = 0; n < npoints; n++) {
-			double parsum = 0.0;
-			double partial = 0.0;
-
-			for (int m = 1; m <= npoints -1; m++) {
-				partial = cos(2.0*M_PI*((double) m)*( ( ((double) n) - ( ((double) npoints) * 2.0 -1 ) / 2 ) / ( ((double) npoints) * 2.0) ));
-				parsum = parsum + eqfreqresp[m]*partial;
-			}
-			ir[n] = (eqfreqresp[0] + 2.0 * parsum)/((double) npoints * 2.0);
+		ir[n] = (eqfreqresp[0] + 2.0 * parsum)/((double) npoints * 2.0);
 #ifdef DEBUG
-			printf("%.4f\n", ir[n]);
+		printf("%.4f\n", ir[n]);
 #endif
-		}
-		for (int n = 0; n < npoints; n++) {
-			ir[npoints+n] = ir[npoints-(n + 1)];
+	}
+	for (int n = 0; n < npoints; n++) {
+		ir[npoints+n] = ir[npoints-(n + 1)];
 #ifdef DEBUG
-			printf("%.4f\n", ir[npoints+n]);
+		printf("%.4f\n", ir[npoints+n]);
 #endif
-		}
-
-
 	}
 
-	// scale input according to required calibration
-	// this could be different for certain digital cinema formats
-	double inputcalib(double dbdiffch)
-	{
-		return pow(10, dbdiffch / 20);
-	}
 
-	void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum) {
+}
 
-		fprintf(filehandle, "%.4f", featuretimesec);
-		fprintf(filehandle, "\t");
-		fprintf(filehandle, "%.4f\n", oldsum.leqm());
+// scale input according to required calibration
+// this could be different for certain digital cinema formats
+double inputcalib(double dbdiffch)
+{
+	return pow(10, dbdiffch / 20);
+}
+
+void logleqm(FILE * filehandle, double featuretimesec, Sum const& oldsum) {
+
+	fprintf(filehandle, "%.4f", featuretimesec);
+	fprintf(filehandle, "\t");
+	fprintf(filehandle, "%.4f\n", oldsum.leqm());
 
 
-	}
+}
 
-	void logleqm10(FILE * filehandle, double featuretimesec, double longaverage) {
-		double leqm10 = 20*log10(pow(longaverage, 0.500)) +  108.010299957;
-		fprintf(filehandle, "%.4f", featuretimesec);
-		fprintf(filehandle, "\t");
-		fprintf(filehandle, "%.4f\n", leqm10);
+void logleqm10(FILE * filehandle, double featuretimesec, double longaverage) {
+	double leqm10 = 20*log10(pow(longaverage, 0.500)) +  108.010299957;
+	fprintf(filehandle, "%.4f", featuretimesec);
+	fprintf(filehandle, "\t");
+	fprintf(filehandle, "%.4f\n", leqm10);
 
-	}
+}
