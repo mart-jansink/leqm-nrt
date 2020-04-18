@@ -118,8 +118,8 @@ private:
 class Worker
 {
 public:
-	Worker(double* buffer, int buffer_size_samples, int nsamples, int nch, int npoints, std::vector<double> const& ir, Sum* sum, std::vector<double> chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
-		: _arg_buffer(buffer_size_samples)
+	Worker(std::vector<double> buffer, int nsamples, int nch, int npoints, std::vector<double> const& ir, Sum* sum, std::vector<double> chconf, int shorttermindex, double* shorttermarray, int leqm10flag)
+		: _buffer(buffer)
 		, _nsamples(nsamples)
 		, _nch(nch)
 		, _npoints(npoints)
@@ -130,7 +130,6 @@ public:
 		, _shorttermarray(shorttermarray)
 		, _leqm10flag(leqm10flag)
 	{
-		memcpy(_arg_buffer.data(), buffer, nsamples * sizeof(double));
 		_thread = std::thread(&Worker::process, this);
 	}
 
@@ -213,7 +212,7 @@ private:
 			for (int n = ch, m = 0; n < _nsamples; n += _nch, m++) {
 				// use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
 				//so not normalized but calibrated
-				normalized_buffer[m] = _arg_buffer[n] * _chconf[ch]; //this scale amplitude according to specified calibration
+				normalized_buffer[m] = _buffer[n] * _chconf[ch]; //this scale amplitude according to specified calibration
 			}
 
 			//convolution
@@ -239,7 +238,7 @@ private:
 		_sum->sum_samples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
 	}
 
-	std::vector<double> _arg_buffer;
+	std::vector<double> _buffer;
 	int _nsamples;
 	int _nch;
 	int _npoints;
@@ -499,7 +498,7 @@ Result calculate(
 	}
 
 	int buffer_size_samples = (sf_info.samplerate * sf_info.channels * buffer_size_ms) / 1000;
-	double* buffer = new double[buffer_size_samples];
+	std::vector<double> buffer(buffer_size_samples);
 
 	int numbershortperiods = 0;
 	if (enable_leqm10_log) {
@@ -580,11 +579,10 @@ Result calculate(
 	int staindex = 0; //shorttermarrayindex
 
 
-	while((samples_read = sf_read_double(file, buffer, buffer_size_samples)) > 0) {
+	while((samples_read = sf_read_double(file, buffer.data(), buffer_size_samples)) > 0) {
 		worker_args.push_back(
 			std::make_shared<Worker>(
 				buffer,
-				buffer_size_samples,
 				samples_read,
 				sf_info.channels,
 				number_of_filter_interpolation_points,
@@ -683,7 +681,6 @@ Result calculate(
 	sf_close(file);
 
 	delete totsum;
-	delete[] buffer;
 
 	return result;
 }
