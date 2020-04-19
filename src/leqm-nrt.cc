@@ -41,9 +41,12 @@
 #include <mutex>
 #include <functional>
 
+using namespace leqm_nrt;
+
 // Version 0.0.18 (C) Luca Trisciani 2011-2013, 2017-2018
 // Tool from the DCP-Werkstatt Software Bundle
 
+namespace leqm_nrt {
 
 class Worker
 {
@@ -156,6 +159,8 @@ private:
 	std::thread _thread;
 };
 
+}
+
 
 //the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
 //it is also different for the way it interpolates between DC and 31 Hz
@@ -237,7 +242,7 @@ static std::vector<double> inverse_fft(std::vector<double> const& freq_response)
 }
 
 
-Result calculate_file(
+Result leqm_nrt::calculate_file(
 	std::string sound_filename,
 	std::vector<double> channel_corrections,
 	int buffer_size_ms,
@@ -323,7 +328,7 @@ std::vector<double> default_channel_corrections(int channels)
 }
 
 
-double convert_log_to_linear_single(double in)
+double leqm_nrt::convert_log_to_linear_single(double in)
 {
 	return powf(10, in / 20.0f);
 }
@@ -420,4 +425,3 @@ double Calculator::leq_nw()
 
 	return _sum.rms();
 }
-

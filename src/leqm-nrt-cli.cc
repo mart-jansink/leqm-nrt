@@ -91,7 +91,7 @@ int main(int argc, const char ** argv)
 			for (;;)  {
 				if (in < argc) {
 					if (!(strncmp(argv[in], "-", 1) == 0) || isdigit(argv[in][1])) {
-						channel_corrections.push_back(convert_log_to_linear_single(atof(argv[in++])));
+						channel_corrections.push_back(leqm_nrt::convert_log_to_linear_single(atof(argv[in++])));
 					} else break;
 				} else break;
 
@@ -143,7 +143,7 @@ int main(int argc, const char ** argv)
 		}
 	}
 
-	auto result = calculate_file(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, num_cpu);
+	auto result = leqm_nrt::calculate_file(sound_filename, channel_corrections, buffer_size_ms, number_of_filter_interpolation_points, num_cpu);
 
 	if (display_leqnw) {
 		printf("Leq(nW): %.4f\n", result.leq_nw); // Leq(no Weighting)

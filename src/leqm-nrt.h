@@ -6,6 +6,8 @@
 #include <cmath>
 #include <memory>
 
+namespace leqm_nrt {
+
 class Sum
 {
 public:
@@ -162,4 +164,6 @@ private:
 	std::vector<double> _buffer;
 	size_t _buffer_free_offset = 0;
 };
+
+}
 
