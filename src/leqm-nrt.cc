@@ -213,10 +213,79 @@ private:
 };
 
 
-std::vector<double> equalinterval2(double const freqsamples[], double const * freqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
-std::vector<double> convert_log_to_linear(std::vector<double> const& in);
-double inputcalib (double dbdiffch);
-std::vector<double> inverse_fft(std::vector<double> const& freq_response);
+//the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
+//it is also different for the way it interpolates between DC and 31 Hz
+// Pay attention that also arguments to the functions are changed
+static std::vector<double> equalinterval2(double const freqsamples[], double const freqresp_db[], int points, int samplingfreq, int origpoints, int bitdepthsoundfile)
+{
+	std::vector<double> freq_response(points);
+	//calculate miminum attenuation depending on the bitdeph (minus one), that is −6.020599913 dB per bit in eccess to sign
+	double const dcatt = ((double) (bitdepthsoundfile - 1))*(-6.020599913) + 20.00; //in dB
+	//double dcatt = -90.3;
+	double const pass = ((double) (samplingfreq >> 1)) / ((double) points);
+	for (int ieq = 0, i = 0; ieq < points; ieq++) {
+		double const freq = ieq*pass;
+
+		if (freq == 0.0) {
+			freq_response[ieq] = dcatt;
+		} else if (freq < freqsamples[0]) { // this has a lot of influence on final Leq(M) value
+			freq_response[ieq] = ((freqresp_db[0] - dcatt) / (freqsamples[0] - 0)) * freq + dcatt;
+			//freq_response[ieq] = freqresp_db[0]; // Is this meaningful? Shouldn't I interpolate between 0 Hz and 31 Hz? Otherwise for DC I have -35.5 dB
+			continue;
+		} else {
+
+			if ((freq >= freqsamples[i]) && (freq < freqsamples[i+1])) {
+				freq_response[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq - freqsamples[i]) + freqresp_db[i];
+			} else if (freq >=freqsamples[i+1]) {
+				while(freq >= freqsamples[i+1]) {
+					i++;
+					if ((i + 1) >= origpoints) {
+						break;
+					}
+				}
+				if ((i+1) < origpoints) {
+					freq_response[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
+				} else {
+					freq_response[ieq] = ((1 - freqresp_db[i])/(((double) (samplingfreq >> 1)) - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
+				}
+			}
+		}
+	}
+	return freq_response;
+}
+
+
+static std::vector<double> convert_log_to_linear(std::vector<double> const& in)
+{
+	std::vector<double> out(in.size());
+	for (auto i = 0U; i < in.size(); i++) {
+		out[i] = powf(10, in[i] / 20.0);
+	}
+	return out;
+}
+
+
+static std::vector<double> inverse_fft(std::vector<double> const& freq_response)
+{
+	int const npoints = freq_response.size();
+	std::vector<double> ir(npoints * 2);
+	for (int n = 0; n < npoints; n++) {
+		double parsum = 0.0;
+		double partial = 0.0;
+
+		for (int m = 1; m <= npoints - 1; m++) {
+			partial = cos(2.0 * M_PI * m * ((n - (npoints * 2.0 - 1) / 2) / (npoints * 2.0)));
+			parsum = parsum + freq_response[m] * partial;
+		}
+		ir[n] = (freq_response[0] + 2.0 * parsum) / (npoints * 2.0);
+	}
+
+	for (int n = 0; n < npoints; n++) {
+		ir[npoints + n] = ir[npoints - (n + 1)];
+	}
+
+	return ir;
+}
 
 
 Result calculate_file(
@@ -362,89 +431,9 @@ Result calculate_function(
 }
 
 
-//the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
-//it is also different for the way it interpolates between DC and 31 Hz
-// Pay attention that also arguments to the functions are changed
-std::vector<double> equalinterval2(double const freqsamples[], double const freqresp_db[], int points, int samplingfreq, int origpoints, int bitdepthsoundfile)
-{
-	std::vector<double> freq_response(points);
-	//calculate miminum attenuation depending on the bitdeph (minus one), that is −6.020599913 dB per bit in eccess to sign
-	double const dcatt = ((double) (bitdepthsoundfile - 1))*(-6.020599913) + 20.00; //in dB
-	//double dcatt = -90.3;
-	double const pass = ((double) (samplingfreq >> 1)) / ((double) points);
-	for (int ieq = 0, i = 0; ieq < points; ieq++) {
-		double const freq = ieq*pass;
-
-		if (freq == 0.0) {
-			freq_response[ieq] = dcatt;
-		} else if (freq < freqsamples[0]) { // this has a lot of influence on final Leq(M) value
-			freq_response[ieq] = ((freqresp_db[0] - dcatt) / (freqsamples[0] - 0)) * freq + dcatt;
-			//freq_response[ieq] = freqresp_db[0]; // Is this meaningful? Shouldn't I interpolate between 0 Hz and 31 Hz? Otherwise for DC I have -35.5 dB
-			continue;
-		} else {
-
-			if ((freq >= freqsamples[i]) && (freq < freqsamples[i+1])) {
-				freq_response[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq - freqsamples[i]) + freqresp_db[i];
-			} else if (freq >=freqsamples[i+1]) {
-				while(freq >= freqsamples[i+1]) {
-					i++;
-					if ((i + 1) >= origpoints) {
-						break;
-					}
-				}
-				if ((i+1) < origpoints) {
-					freq_response[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
-				} else {
-					freq_response[ieq] = ((1 - freqresp_db[i])/(((double) (samplingfreq >> 1)) - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
-				}
-			}
-		}
-	}
-	return freq_response;
-}
-
-
-std::vector<double> convert_log_to_linear(std::vector<double> const& in)
-{
-	std::vector<double> out(in.size());
-	for (auto i = 0U; i < in.size(); i++) {
-		out[i] = powf(10, in[i] / 20.0);
-	}
-	return out;
-}
-
-
 double convert_log_to_linear_single(double in)
 {
 	return powf(10, in / 20.0f);
 }
 
 
-std::vector<double> inverse_fft(std::vector<double> const& freq_response)
-{
-	int const npoints = freq_response.size();
-	std::vector<double> ir(npoints * 2);
-	for (int n = 0; n < npoints; n++) {
-		double parsum = 0.0;
-		double partial = 0.0;
-
-		for (int m = 1; m <= npoints - 1; m++) {
-			partial = cos(2.0 * M_PI * m * ((n - (npoints * 2.0 - 1) / 2) / (npoints * 2.0)));
-			parsum = parsum + freq_response[m] * partial;
-		}
-		ir[n] = (freq_response[0] + 2.0 * parsum) / (npoints * 2.0);
-	}
-
-	for (int n = 0; n < npoints; n++) {
-		ir[npoints + n] = ir[npoints - (n + 1)];
-	}
-
-	return ir;
-}
-
-// scale input according to required calibration
-// this could be different for certain digital cinema formats
-double inputcalib(double dbdiffch)
-{
-	return pow(10, dbdiffch / 20);
-}
