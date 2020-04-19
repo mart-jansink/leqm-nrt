@@ -44,15 +44,6 @@
 // Version 0.0.18 (C) Luca Trisciani 2011-2013, 2017-2018
 // Tool from the DCP-Werkstatt Software Bundle
 
-
-
-// COMPILATION
-// compile for DEBUG with gcc -g -DEBUG -lsndfile -lfftw3 -lm -lpthread -lrt -o leqm-nrt leqm-nrt.cpp
-//otherwise  gcc -lsndfile -lm -lpthread -lrt -o leqm-nrt leqm-nrt.c
-
-//#define DEBUG
-
-
 class Sum
 {
 public:
@@ -339,12 +330,6 @@ Result calculate_function(
 
 	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, sample_rate, origpoints, bits_per_sample);
 	auto eqfreqresp = convert_log_to_linear(eqfreqresp_db);
-
-#ifdef DEBUG
-	for (int i=0; i < number_of_filter_interpolation_points; i++) {
-		printf("%d\t%.2f\t%.2f\t%.6f\n", i, eqfreqsamples[i], eqfreqresp_db[i], eqfreqresp[i]);
-	}
-#endif
 
 	auto ir = inversefft2(eqfreqresp, number_of_filter_interpolation_points);
 
