@@ -216,8 +216,14 @@ private:
 //the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
 //it is also different for the way it interpolates between DC and 31 Hz
 // Pay attention that also arguments to the functions are changed
-static std::vector<double> equalinterval2(double const freqsamples[], double const freqresp_db[], int points, int samplingfreq, int origpoints, int bitdepthsoundfile)
+static std::vector<double> equalinterval2(int points, int samplingfreq, int bitdepthsoundfile)
 {
+	//ISO 21727:2004(E)
+	// M Weighting
+	double const frequencies[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
+	double const db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
+	int constexpr points_in_standard_ccir_filter = 21;
+
 	std::vector<double> freq_response(points);
 	//calculate miminum attenuation depending on the bitdeph (minus one), that is −6.020599913 dB per bit in eccess to sign
 	double const dcatt = ((double) (bitdepthsoundfile - 1))*(-6.020599913) + 20.00; //in dB
@@ -228,25 +234,25 @@ static std::vector<double> equalinterval2(double const freqsamples[], double con
 
 		if (freq == 0.0) {
 			freq_response[ieq] = dcatt;
-		} else if (freq < freqsamples[0]) { // this has a lot of influence on final Leq(M) value
-			freq_response[ieq] = ((freqresp_db[0] - dcatt) / (freqsamples[0] - 0)) * freq + dcatt;
-			//freq_response[ieq] = freqresp_db[0]; // Is this meaningful? Shouldn't I interpolate between 0 Hz and 31 Hz? Otherwise for DC I have -35.5 dB
+		} else if (freq < frequencies[0]) { // this has a lot of influence on final Leq(M) value
+			freq_response[ieq] = ((db[0] - dcatt) / (frequencies[0] - 0)) * freq + dcatt;
+			//freq_response[ieq] = db[0]; // Is this meaningful? Shouldn't I interpolate between 0 Hz and 31 Hz? Otherwise for DC I have -35.5 dB
 			continue;
 		} else {
 
-			if ((freq >= freqsamples[i]) && (freq < freqsamples[i+1])) {
-				freq_response[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq - freqsamples[i]) + freqresp_db[i];
-			} else if (freq >=freqsamples[i+1]) {
-				while(freq >= freqsamples[i+1]) {
+			if ((freq >= frequencies[i]) && (freq < frequencies[i+1])) {
+				freq_response[ieq] = ((db[i+1] - db[i])/(frequencies[i+1] - frequencies[i]))*(freq - frequencies[i]) + db[i];
+			} else if (freq >=frequencies[i+1]) {
+				while(freq >= frequencies[i+1]) {
 					i++;
-					if ((i + 1) >= origpoints) {
+					if ((i + 1) >= points_in_standard_ccir_filter) {
 						break;
 					}
 				}
-				if ((i+1) < origpoints) {
-					freq_response[ieq] = ((freqresp_db[i+1] - freqresp_db[i])/(freqsamples[i+1] - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
+				if ((i+1) < points_in_standard_ccir_filter) {
+					freq_response[ieq] = ((db[i+1] - db[i])/(frequencies[i+1] - frequencies[i]))*(freq- frequencies[i]) + db[i];
 				} else {
-					freq_response[ieq] = ((1 - freqresp_db[i])/(((double) (samplingfreq >> 1)) - freqsamples[i]))*(freq- freqsamples[i]) + freqresp_db[i];
+					freq_response[ieq] = ((1 - db[i])/(((double) (samplingfreq >> 1)) - frequencies[i]))*(freq- frequencies[i]) + db[i];
 				}
 			}
 		}
@@ -344,13 +350,7 @@ Result calculate_file(
 
 std::vector<double> calculate_ir(double number_of_filter_interpolation_points, int sample_rate, int bits_per_sample)
 {
-	//ISO 21727:2004(E)
-	// M Weighting
-	double const m_weighting_frequencies[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
-	double const m_weighting_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
-	int constexpr points_in_standard_ccir_filter = 21;
-
-	return inverse_fft(convert_log_to_linear(equalinterval2(m_weighting_frequencies, m_weighting_db, number_of_filter_interpolation_points, sample_rate, points_in_standard_ccir_filter, bits_per_sample)));
+	return inverse_fft(convert_log_to_linear(equalinterval2(number_of_filter_interpolation_points, sample_rate, bits_per_sample)));
 }
 
 
