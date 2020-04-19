@@ -141,12 +141,11 @@ private:
 		return stsum / nsamples;
 	}
 
-	int accumulate_ch(std::vector<double>& ch_accumulator, std::vector<double> const& input_channel, int nsamples) const
+	void accumulate_ch(std::vector<double>& ch_accumulator, std::vector<double> const& input_channel, int nsamples) const
 	{
 		for (auto i = 0; i < nsamples; i++) {
 			ch_accumulator[i] += input_channel[i];
 		}
-		return 0;
 	}
 
 	std::vector<double> rectify(std::vector<double> const& input) const
