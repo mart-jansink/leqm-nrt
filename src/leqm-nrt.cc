@@ -221,7 +221,7 @@ private:
 };
 
 
-void equalinterval2(double const freqsamples[], double const * freqresp, std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
+void equalinterval2(double const freqsamples[], double const * freqresp, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
 std::vector<double> convert_log_to_linear(std::vector<double> const& in);
 double convert_log_to_linear_single(double in);
 double inputcalib (double dbdiffch);
@@ -326,9 +326,8 @@ Result calculate_function(
 	double const freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
 
 	std::vector<double> eqfreqresp_db(number_of_filter_interpolation_points);
-	std::vector<double> eqfreqsamples(number_of_filter_interpolation_points);
 
-	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, sample_rate, origpoints, bits_per_sample);
+	equalinterval2(freqsamples, freqresp_db, eqfreqresp_db, number_of_filter_interpolation_points, sample_rate, origpoints, bits_per_sample);
 	auto eqfreqresp = convert_log_to_linear(eqfreqresp_db);
 
 	auto ir = inversefft2(eqfreqresp, number_of_filter_interpolation_points);
@@ -381,7 +380,7 @@ Result calculate_function(
 //the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
 //it is also different for the way it interpolates between DC and 31 Hz
 // Pay attention that also arguments to the functions are changed
-void equalinterval2(double const freqsamples[], double const freqresp_db[], std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
+void equalinterval2(double const freqsamples[], double const freqresp_db[], std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
 	double freq;
 
 
@@ -391,7 +390,6 @@ void equalinterval2(double const freqsamples[], double const freqresp_db[], std:
 	double pass = ((double) (samplingfreq >> 1)) / ((double) points);
 	for (int ieq = 0, i = 0; ieq < points; ieq++) {
 		freq = ieq*pass;
-		eqfreqsamples[ieq] = freq;
 
 		if (freq == 0.0) {
 			eqfreqresp[ieq] = dcatt;
