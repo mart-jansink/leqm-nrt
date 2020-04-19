@@ -231,9 +231,8 @@ private:
 
 
 void equalinterval2(double const freqsamples[], double const * freqresp, std::vector<double>& eqfreqsamples, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
-void convloglin(std::vector<double> const& in, std::vector<double>& out, int points);
-double convlinlog_single(double in);
-double convloglin_single(double in);
+std::vector<double> convert_log_to_linear(std::vector<double> const& in);
+double convert_log_to_linear_single(double in);
 double inputcalib (double dbdiffch);
 std::vector<double> inversefft2(std::vector<double> const& eqfreqresp, int npoints);
 
@@ -310,13 +309,13 @@ Result calculate_function(
 	//postprocessing parameters
 	if (static_cast<int>(channel_corrections.size()) == channels) {
 		for (auto i: channel_corrections) {
-			channel_conf_cal.push_back(convloglin_single(i));
+			channel_conf_cal.push_back(convert_log_to_linear_single(i));
 
 		}
 	} else if (channel_corrections.empty() && channels == 6) {
 		double conf51[] = {0, 0, 0, 0, -3, -3};
 		for (auto cind = 0; cind < channels; cind++) {
-			channel_conf_cal.push_back(convloglin_single(conf51[cind]));
+			channel_conf_cal.push_back(convert_log_to_linear_single(conf51[cind]));
 		}
 	} else {
 		return {-100};
@@ -337,10 +336,9 @@ Result calculate_function(
 
 	std::vector<double> eqfreqresp_db(number_of_filter_interpolation_points);
 	std::vector<double> eqfreqsamples(number_of_filter_interpolation_points);
-	std::vector<double> eqfreqresp(number_of_filter_interpolation_points);
 
 	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, sample_rate, origpoints, bits_per_sample);
-	convloglin(eqfreqresp_db, eqfreqresp, number_of_filter_interpolation_points);
+	auto eqfreqresp = convert_log_to_linear(eqfreqresp_db);
 
 #ifdef DEBUG
 	for (int i=0; i < number_of_filter_interpolation_points; i++) {
@@ -438,21 +436,21 @@ void equalinterval2(double const freqsamples[], double const freqresp_db[], std:
 }
 
 
-void convloglin(std::vector<double> const& in, std::vector<double>& out, int points) {
-	for (int i = 0; i < points; i++) {
-		out[i] = powf(10, (in[i]/20.0));
+std::vector<double> convert_log_to_linear(std::vector<double> const& in)
+{
+	std::vector<double> out(in.size());
+	for (auto i = 0U; i < in.size(); i++) {
+		out[i] = powf(10, in[i] / 20.0);
 	}
+	return out;
 }
 
 
-double convlinlog_single(double in) {
-	return log(in) * 20.0f;
-}
-
-
-double convloglin_single(double in) {
+double convert_log_to_linear_single(double in)
+{
 	return powf(10, in / 20.0f);
 }
+
 
 std::vector<double> inversefft2(std::vector<double> const& eqfreqresp, int npoints)
 {
