@@ -18,7 +18,7 @@ def configure(conf):
     conf.env.WITH_LIBSNDFILE = not conf.options.without_libsndfile
     if conf.env.WITH_LIBSNDFILE:
         conf.env.append_value('CXXFLAGS', ['-DLEQM_NRT_WITH_LIBSNDFILE'])
-    conf.env.append_value('CXXFLAGS', ['-Wall', '-Wextra', '-D_FILE_OFFSET_BITS=64', '-D__STDC_FORMAT_MACROS'])
+    conf.env.append_value('CXXFLAGS', ['-Wall', '-Wextra', '-D_FILE_OFFSET_BITS=64', '-D__STDC_FORMAT_MACROS', '-std=c++11'])
     conf.env.append_value('LINKFLAGS', ['-pthread'])
     conf.check_cfg(package='sndfile', args='--cflags --libs', uselib_store='SNDFILE')
 
