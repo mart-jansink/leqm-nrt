@@ -180,8 +180,6 @@ private:
 	{
 		int const frames = _nsamples / _nch;
 
-		std::vector<double> sum_and_square_buffer(frames);
-		std::vector<double> c_sum_and_square_buffer(frames);
 		std::vector<double> ch_sum_accumulator_norm(frames);
 		std::vector<double> ch_sum_accumulator_conv(frames);
 
@@ -195,15 +193,9 @@ private:
 				normalized_buffer[m] = _buffer[n] * _chconf[ch]; //this scale amplitude according to specified calibration
 			}
 
-			//convolution
 			auto convolved_buffer = convolve(normalized_buffer, _ir);
-			//rectify, square und sum
-			c_sum_and_square_buffer = rectify(convolved_buffer);
-			sum_and_square_buffer = rectify(normalized_buffer);
-
-			accumulate_ch(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
-			accumulate_ch(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
-
+			accumulate_ch(ch_sum_accumulator_norm, rectify(normalized_buffer), frames);
+			accumulate_ch(ch_sum_accumulator_conv, rectify(convolved_buffer), frames);
 		}
 
 		_sum->sum_samples(ch_sum_accumulator_norm, ch_sum_accumulator_conv, frames);
