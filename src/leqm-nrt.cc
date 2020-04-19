@@ -159,20 +159,22 @@ private:
 
 	}
 
-	void convolv_buff(std::vector<double> const& sig_in, std::vector<double>& sig_out, std::vector<double> const& impresp, int sigin_dim, int impresp_dim) const
+	std::vector<double> convolve(std::vector<double> const& signal, std::vector<double> const& ir) const
 	{
+		std::vector<double> result(signal.size());
 		double sum = 0.0;
-		for (int i = 0; i < sigin_dim; i++) {
-			int m = i;
-			for (int l = impresp_dim - 1; l >= 0; l--, m++) {
-				if (m >= sigin_dim) {
-					m -= sigin_dim;
+		for (auto i = 0U; i < signal.size(); i++) {
+			auto m = i;
+			for (int l = ir.size()- 1; l >= 0; l--, m++) {
+				if (m >= signal.size()) {
+					m -= signal.size();
 				}
-				sum += sig_in[m] * impresp[l];
+				sum += signal[m] * ir[l];
 			}
-			sig_out[i] = sum;
+			result[i] = sum;
 			sum = 0.0;
 		}
+		return result;
 	}
 
 	void process()
@@ -187,7 +189,6 @@ private:
 		for (int ch = 0; ch < _nch; ch++) {
 
 			std::vector<double> normalized_buffer(frames);
-			std::vector<double> convolved_buffer(frames);
 
 			for (int n = ch, m = 0; n < _nsamples; n += _nch, m++) {
 				// use this for calibration depending on channel config for ex. chconf[6] = {1.0, 1.0, 1.0, 1.0, 0.707945784, 0.707945784} could be the default for 5.1 soundtracks
@@ -196,7 +197,7 @@ private:
 			}
 
 			//convolution
-			convolv_buff(normalized_buffer, convolved_buffer, _ir, frames, _npoints * 2);
+			auto convolved_buffer = convolve(normalized_buffer, _ir);
 			//rectify, square und sum
 			rectify(c_sum_and_square_buffer, convolved_buffer, frames);
 			rectify(sum_and_square_buffer, normalized_buffer, frames);
