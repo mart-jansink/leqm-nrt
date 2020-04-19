@@ -21,7 +21,7 @@
 
  */
 
-#include "leqm-nrt.h"
+#include "leqm_nrt.h"
 
 #include <stdio.h>
 #include <math.h>

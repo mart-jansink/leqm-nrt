@@ -21,11 +21,13 @@
 
  */
 
-#include "leqm-nrt.h"
+#include "leqm_nrt.h"
 
 #include <stdio.h>
 #include <math.h>
+#ifdef LEQM_NRT_WITH_LIBSNDFILE
 #include <sndfile.h>
+#endif
 #include <unistd.h>
 #include <pthread.h>
 #include <string.h>
@@ -242,6 +244,7 @@ static std::vector<double> inverse_fft(std::vector<double> const& freq_response)
 }
 
 
+#ifdef LEQM_NRT_WITH_LIBSNDFILE
 Result leqm_nrt::calculate_file(
 	std::string sound_filename,
 	std::vector<double> channel_corrections,
@@ -302,6 +305,7 @@ Result leqm_nrt::calculate_file(
 
 	return {calculator.leq_m(), calculator.leq_nw()};
 }
+#endif
 
 
 std::vector<double> calculate_ir(double number_of_filter_interpolation_points, int sample_rate, int bits_per_sample)

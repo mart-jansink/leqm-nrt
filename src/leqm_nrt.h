@@ -1,3 +1,26 @@
+/*
+    leqm-nrt is a  non-real-time implementation
+    of Leq(M) measurement according to ISO 21727:2004(E)
+    "Cinematography -- Method of measurement of perceived
+    loudness of motion-picture audio material"
+
+    Copyright (C) 2011-2013, 2017-2018 Luca Trisciani
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+ */
+
 #pragma once
 
 #include <string>
@@ -97,6 +120,7 @@ struct Result
 };
 
 
+#ifdef LEQM_NRT_WITH_LIBSNDFILE
 Result calculate_file(
 	std::string sound_filename,
 	std::vector<double> channel_corrections,
@@ -104,6 +128,7 @@ Result calculate_file(
 	int number_of_filter_interpolation_points,
 	int num_cpu
 	);
+#endif
 
 
 double convert_log_to_linear_single(double in);
