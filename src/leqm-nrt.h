@@ -1,6 +1,67 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <stdexcept>
+#include <mutex>
+#include <cmath>
+#include <memory>
+
+class Sum
+{
+public:
+	void sum_samples(std::vector<double> const& input_samples, std::vector<double> const& c_input_samples, int nsamples)
+	{
+		_mutex.lock();
+		_nsamples += nsamples;
+		for (auto i = 0; i < nsamples; i++) {
+			_sum  += input_samples[i];
+			_csum += c_input_samples[i];
+		}
+		_mutex.unlock();
+	}
+
+	int nsamples() const
+	{
+		return _nsamples;
+	}
+
+	/*
+	   How the final offset is calculated without reference to a test tone:
+	   P0 is the SPL reference 20 uPa
+	   Reference SPL is RMS ! So 85 SPL over 20 uPa is 10^4.25 x 0.000020 = 0.355655882 Pa (RMS),
+	   but Peak value is 0.355655882 x sqr(2) = 0.502973372 that is 20 x log ( 0.502973372 / 0.000020) = 88.010299957
+	   To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957
+
+	   But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
+	*/
+
+	double rms() const
+	{
+		return 20 * log10(mean()) + 108.010299957;
+	}
+
+	double leqm() const
+	{
+		return 20 * log10(cmean()) + 108.010299957;
+	}
+
+private:
+	double mean() const
+	{
+		return pow(_sum / _nsamples, 0.500);
+	}
+
+	double cmean() const
+	{
+		return pow(_csum / _nsamples, 0.500);
+	}
+
+	double _csum = 0.0; // convolved sum
+	double _sum = 0.0; // flat sum
+	int _nsamples = 0;
+	std::mutex _mutex;
+};
+
 
 struct Result
 {
@@ -41,16 +102,64 @@ Result calculate_file(
 	);
 
 
-Result calculate_function(
-	std::function<int64_t (double*, int64_t)> get_audio_data,
-	int channels,
-	int sample_rate,
-	int bits_per_sample,
-	std::vector<double> channel_corrections,
-	int buffer_size_ms,
-	int number_of_filter_interpolation_points,
-	int num_cpu
+double convert_log_to_linear_single(double in);
+
+
+class BadBufferSizeError : public std::runtime_error
+{
+public:
+	BadBufferSizeError()
+		: std::runtime_error("Buffer size does not correspond to an integer number of samples")
+	{}
+};
+
+
+class BadChannelCorrectionsError : public std::runtime_error
+{
+public:
+	BadChannelCorrectionsError()
+		: std::runtime_error("Incorrect number of channel corrections given, and no defaults are available")
+	{}
+};
+
+
+class Worker;
+
+
+class Calculator
+{
+public:
+	Calculator(
+		int channels,
+		int sample_rate,
+		int bits_per_sample,
+		std::vector<double> channel_corrections,
+		int buffer_size_ms,
+		int number_of_filter_interpolation_points,
+		int num_cpu
 	);
 
+	Calculator(Calculator&) = delete;
+	Calculator(Calculator&&) = delete;
+	bool operator=(Calculator&) = delete;
+	bool operator=(Calculator&&) = delete;
 
-double convert_log_to_linear_single(double in);
+	void add(std::vector<double> samples);
+
+	double leq_m();
+	double leq_nw();
+
+private:
+	void process_buffer();
+
+	int _channels;
+	std::vector<double> _channel_corrections;
+	int _number_of_filter_interpolation_points;
+	int _num_cpu;
+	std::vector<std::shared_ptr<Worker>> _workers;
+	Sum _sum;
+	std::vector<double> _ir;
+	std::vector<double> _buffer;
+	size_t _buffer_free_offset = 0;
+};
+

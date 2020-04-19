@@ -44,62 +44,6 @@
 // Version 0.0.18 (C) Luca Trisciani 2011-2013, 2017-2018
 // Tool from the DCP-Werkstatt Software Bundle
 
-class Sum
-{
-public:
-	void sum_samples(std::vector<double> const& input_samples, std::vector<double> const& c_input_samples, int nsamples)
-	{
-		_mutex.lock();
-		_nsamples += nsamples;
-		for (auto i = 0; i < nsamples; i++) {
-			_sum  += input_samples[i];
-			_csum += c_input_samples[i];
-		}
-		_mutex.unlock();
-	}
-
-	int nsamples() const
-	{
-		return _nsamples;
-	}
-
-	/*
-	   How the final offset is calculated without reference to a test tone:
-	   P0 is the SPL reference 20 uPa
-	   Reference SPL is RMS ! So 85 SPL over 20 uPa is 10^4.25 x 0.000020 = 0.355655882 Pa (RMS),
-	   but Peak value is 0.355655882 x sqr(2) = 0.502973372 that is 20 x log ( 0.502973372 / 0.000020) = 88.010299957
-	   To that one has to add the 20 dB offset of the reference -20dBFS: 88.010299957 + 20.00 = 108.010299957
-
-	   But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
-	*/
-
-	double rms() const
-	{
-		return 20 * log10(mean()) + 108.010299957;
-	}
-
-	double leqm() const
-	{
-		return 20 * log10(cmean()) + 108.010299957;
-	}
-
-private:
-	double mean() const
-	{
-		return pow(_sum / _nsamples, 0.500);
-	}
-
-	double cmean() const
-	{
-		return pow(_csum / _nsamples, 0.500);
-	}
-
-	double _csum = 0.0; // convolved sum
-	double _sum = 0.0; // flat sum
-	int _nsamples = 0;
-	std::mutex _mutex;
-};
-
 
 class Worker
 {
@@ -328,10 +272,7 @@ Result calculate_file(
 			return -1;
 	}
 
-	auto result = calculate_function(
-		[file](double* buffer, int64_t samples) -> int64_t {
-			return sf_read_double(file, buffer, samples);
-		},
+	Calculator calculator(
 		sf_info.channels,
 		sf_info.samplerate,
 		bitdepth,
@@ -341,9 +282,20 @@ Result calculate_file(
 		num_cpu
 		);
 
+	while (true) {
+		std::vector<double> buffer(4096);
+		auto read = sf_read_double(file, buffer.data(), buffer.size());
+		if (read <= 0) {
+			break;
+		}
+
+		buffer.resize(read);
+		calculator.add(buffer);
+	}
+
 	sf_close(file);
 
-	return result;
+	return {calculator.leq_m(), calculator.leq_nw()};
 }
 
 
@@ -371,68 +323,101 @@ std::vector<double> default_channel_corrections(int channels)
 }
 
 
-Result calculate_function(
-	std::function<int64_t (double*, int64_t)> get_audio_data,
-	int channels,
-	int sample_rate,
-	int bits_per_sample,
-	std::vector<double> channel_corrections,
-	int buffer_size_ms,
-	int number_of_filter_interpolation_points,
-	int num_cpu
+double convert_log_to_linear_single(double in)
+{
+	return powf(10, in / 20.0f);
+}
+
+
+Calculator::Calculator(
+		int channels,
+		int sample_rate,
+		int bits_per_sample,
+		std::vector<double> channel_corrections,
+		int buffer_size_ms,
+		int number_of_filter_interpolation_points,
+		int num_cpu
 	)
+	: _channels(channels)
+	, _channel_corrections(channel_corrections)
+	, _number_of_filter_interpolation_points(number_of_filter_interpolation_points)
+	, _num_cpu(num_cpu)
 {
 	if ((sample_rate * buffer_size_ms) % 1000) {
-		return -102;
+		throw BadBufferSizeError();
 	}
 
 	if (static_cast<int>(channel_corrections.size()) != channels) {
 		channel_corrections = default_channel_corrections(channels);
 	}
 	if (static_cast<int>(channel_corrections.size()) != channels) {
-		return {100};
+		throw BadChannelCorrectionsError();
 	}
 
-	auto ir = calculate_ir(number_of_filter_interpolation_points, sample_rate, bits_per_sample);
+	_ir = calculate_ir(number_of_filter_interpolation_points, sample_rate, bits_per_sample);
+	_buffer.resize((sample_rate * channels * buffer_size_ms) / 1000);
+}
 
-	Sum totsum;
 
-	std::vector<std::shared_ptr<Worker>> workers;
+void Calculator::process_buffer()
+{
+	if (_buffer_free_offset == 0) {
+		return;
+	}
 
-	int const buffer_size_samples = (sample_rate * channels * buffer_size_ms) / 1000;
-	std::vector<double> buffer(buffer_size_samples);
-	while (true) {
-		auto samples_read = get_audio_data(buffer.data(), buffer_size_samples);
-		if (samples_read <= 0) {
-			break;
-		}
-
-		workers.push_back(
+	_workers.push_back(
 			std::make_shared<Worker>(
-				buffer,
-				samples_read,
-				channels,
-				number_of_filter_interpolation_points,
-				ir,
-				&totsum,
-				channel_corrections
+				_buffer,
+				_buffer_free_offset,
+				_channels,
+				_number_of_filter_interpolation_points,
+				_ir,
+				&_sum,
+				_channel_corrections
 				)
 			);
 
-		if (static_cast<int>(workers.size()) == num_cpu) {
-			workers.clear();
-		}
+	if (static_cast<int>(_workers.size()) == _num_cpu) {
+		_workers.clear();
 	}
 
-	workers.clear();
-
-	return {totsum.leqm(), totsum.rms()};
+	_buffer_free_offset = 0;
 }
 
 
-double convert_log_to_linear_single(double in)
+void Calculator::add(std::vector<double> samples)
 {
-	return powf(10, in / 20.0f);
+	size_t samples_offset = 0;
+
+	while (samples_offset < samples.size()) {
+		/* Copy some data into our buffer */
+		auto to_copy = std::min(samples.size() - samples_offset, _buffer.size() - _buffer_free_offset);
+		memcpy(_buffer.data() + _buffer_free_offset, samples.data() + samples_offset, to_copy * sizeof(double));
+		samples_offset += to_copy;
+		_buffer_free_offset += to_copy;
+
+		/* Process the buffer if it's full */
+		if (_buffer_free_offset == _buffer.size()) {
+			process_buffer();
+		}
+	}
 }
 
+
+double Calculator::leq_m()
+{
+	process_buffer();
+	_workers.clear();
+
+	return _sum.leqm();
+}
+
+
+double Calculator::leq_nw()
+{
+	process_buffer();
+	_workers.clear();
+
+	return _sum.rms();
+}
 
