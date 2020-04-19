@@ -327,14 +327,9 @@ Result calculate_function(
 
 	auto ir = calculate_ir(number_of_filter_interpolation_points, sample_rate, bits_per_sample);
 
-	// read through the entire file
-
 	Sum totsum;
-	Result result;
 
-	// Main loop through audio file
-
-	std::vector<std::shared_ptr<Worker>> worker_args;
+	std::vector<std::shared_ptr<Worker>> workers;
 
 	int const buffer_size_samples = (sample_rate * channels * buffer_size_ms) / 1000;
 	std::vector<double> buffer(buffer_size_samples);
@@ -344,7 +339,7 @@ Result calculate_function(
 			break;
 		}
 
-		worker_args.push_back(
+		workers.push_back(
 			std::make_shared<Worker>(
 				buffer,
 				samples_read,
@@ -356,17 +351,14 @@ Result calculate_function(
 				)
 			);
 
-		if (static_cast<int>(worker_args.size()) == num_cpu) {
-			worker_args.clear();
+		if (static_cast<int>(workers.size()) == num_cpu) {
+			workers.clear();
 		}
 	}
 
-	worker_args.clear();
+	workers.clear();
 
-	result.leq_nw = totsum.rms();
-	result.leq_m = totsum.leqm();
-
-	return result;
+	return {totsum.leqm(), totsum.rms()};
 }
 
 

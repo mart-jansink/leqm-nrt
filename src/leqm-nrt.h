@@ -4,12 +4,14 @@
 
 struct Result
 {
-	Result()
-		: status(0)
-	{}
-
 	Result(int status_)
 		: status(status_)
+	{}
+
+	Result(double leq_m_, double leq_nw_)
+		: status(0)
+		, leq_m(leq_m_)
+		, leq_nw(leq_nw_)
 	{}
 
 	/** 0 on success, or
