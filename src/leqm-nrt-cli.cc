@@ -91,7 +91,7 @@ int main(int argc, const char ** argv)
 			for (;;)  {
 				if (in < argc) {
 					if (!(strncmp(argv[in], "-", 1) == 0) || isdigit(argv[in][1])) {
-						channel_corrections.push_back(atof(argv[in++]));
+						channel_corrections.push_back(convert_log_to_linear_single(atof(argv[in++])));
 					} else break;
 				} else break;
 

@@ -100,6 +100,7 @@ private:
 	std::mutex _mutex;
 };
 
+
 class Worker
 {
 public:
@@ -214,7 +215,6 @@ private:
 
 std::vector<double> equalinterval2(double const freqsamples[], double const * freqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
 std::vector<double> convert_log_to_linear(std::vector<double> const& in);
-double convert_log_to_linear_single(double in);
 double inputcalib (double dbdiffch);
 std::vector<double> inverse_fft(std::vector<double> const& freq_response);
 
@@ -285,6 +285,24 @@ std::vector<double> calculate_ir(double number_of_filter_interpolation_points, i
 }
 
 
+/** @return List of default channel corrections for the given number of channels,
+ *  or an empty vector if we can't offer a default.
+ */
+std::vector<double> default_channel_corrections(int channels)
+{
+	std::vector<double> corr;
+
+	if (channels == 6) {
+		double conf51[] = {0, 0, 0, 0, -3, -3};
+		for (auto cind = 0; cind < channels; cind++) {
+			corr.push_back(convert_log_to_linear_single(conf51[cind]));
+		}
+	}
+
+	return corr;
+}
+
+
 Result calculate_function(
 	std::function<int64_t (double*, int64_t)> get_audio_data,
 	int channels,
@@ -296,25 +314,15 @@ Result calculate_function(
 	int num_cpu
 	)
 {
-	std::vector<double> channel_conf_cal;
-
-	//postprocessing parameters
-	if (static_cast<int>(channel_corrections.size()) == channels) {
-		for (auto i: channel_corrections) {
-			channel_conf_cal.push_back(convert_log_to_linear_single(i));
-
-		}
-	} else if (channel_corrections.empty() && channels == 6) {
-		double conf51[] = {0, 0, 0, 0, -3, -3};
-		for (auto cind = 0; cind < channels; cind++) {
-			channel_conf_cal.push_back(convert_log_to_linear_single(conf51[cind]));
-		}
-	} else {
-		return {-100};
-	}
-
 	if ((sample_rate * buffer_size_ms) % 1000) {
 		return -102;
+	}
+
+	if (static_cast<int>(channel_corrections.size()) != channels) {
+		channel_corrections = default_channel_corrections(channels);
+	}
+	if (static_cast<int>(channel_corrections.size()) != channels) {
+		return {100};
 	}
 
 	auto ir = calculate_ir(number_of_filter_interpolation_points, sample_rate, bits_per_sample);
@@ -323,16 +331,19 @@ Result calculate_function(
 
 	Sum totsum;
 	Result result;
-	sf_count_t samples_read = 0;
 
 	// Main loop through audio file
 
-	int worker_id = 0;
 	std::vector<std::shared_ptr<Worker>> worker_args;
 
 	int const buffer_size_samples = (sample_rate * channels * buffer_size_ms) / 1000;
 	std::vector<double> buffer(buffer_size_samples);
-	while ((samples_read = get_audio_data(buffer.data(), buffer_size_samples)) > 0) {
+	while (true) {
+		auto samples_read = get_audio_data(buffer.data(), buffer_size_samples);
+		if (samples_read <= 0) {
+			break;
+		}
+
 		worker_args.push_back(
 			std::make_shared<Worker>(
 				buffer,
@@ -341,23 +352,16 @@ Result calculate_function(
 				number_of_filter_interpolation_points,
 				ir,
 				&totsum,
-				channel_conf_cal
+				channel_corrections
 				)
 			);
 
-		worker_id++;
-
-		if (worker_id == num_cpu) {
-			worker_id = 0;
+		if (static_cast<int>(worker_args.size()) == num_cpu) {
 			worker_args.clear();
 		}
 	}
 
-	if (worker_id != 0) {
-		for (int idxcpu = 0; idxcpu < worker_id; idxcpu++) { //worker_id is at this point one unit more than threads launched
-			worker_args.clear();
-		}
-	}
+	worker_args.clear();
 
 	result.leq_nw = totsum.rms();
 	result.leq_m = totsum.leqm();

@@ -50,3 +50,5 @@ Result calculate_function(
 	int num_cpu
 	);
 
+
+double convert_log_to_linear_single(double in);
