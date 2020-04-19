@@ -221,7 +221,7 @@ private:
 };
 
 
-void equalinterval2(double const freqsamples[], double const * freqresp, std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
+std::vector<double> equalinterval2(double const freqsamples[], double const * freqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile);
 std::vector<double> convert_log_to_linear(std::vector<double> const& in);
 double convert_log_to_linear_single(double in);
 double inputcalib (double dbdiffch);
@@ -319,17 +319,12 @@ Result calculate_function(
 	int buffer_size_samples = (sample_rate * channels * buffer_size_ms) / 1000;
 	std::vector<double> buffer(buffer_size_samples);
 
-
 	//ISO 21727:2004(E)
 	// M Weighting
 	double const freqsamples[] = {31, 63, 100, 200, 400, 800, 1000, 2000, 3150, 4000, 5000, 6300, 7100, 8000, 9000, 10000, 12500, 14000, 16000, 20000, 31500};
 	double const freqresp_db[] = {-35.5, -29.5, -25.4, -19.4, -13.4, -7.5, -5.6, 0.0, 3.4, 4.9, 6.1, 6.6, 6.4, 5.8, 4.5, 2.5, -5.6, -10.9, -17.3, -27.8, -48.3};
 
-	std::vector<double> eqfreqresp_db(number_of_filter_interpolation_points);
-
-	equalinterval2(freqsamples, freqresp_db, eqfreqresp_db, number_of_filter_interpolation_points, sample_rate, origpoints, bits_per_sample);
-	auto eqfreqresp = convert_log_to_linear(eqfreqresp_db);
-
+	auto eqfreqresp = convert_log_to_linear(equalinterval2(freqsamples, freqresp_db, number_of_filter_interpolation_points, sample_rate, origpoints, bits_per_sample));
 	auto ir = inversefft2(eqfreqresp, number_of_filter_interpolation_points);
 
 	// read through the entire file
@@ -380,16 +375,15 @@ Result calculate_function(
 //the following is different from version 1 because interpolate between db and not linear. Conversion from db to lin must be done after.
 //it is also different for the way it interpolates between DC and 31 Hz
 // Pay attention that also arguments to the functions are changed
-void equalinterval2(double const freqsamples[], double const freqresp_db[], std::vector<double>& eqfreqresp, int points, int samplingfreq, int origpoints, int bitdepthsoundfile) {
-	double freq;
-
-
+std::vector<double> equalinterval2(double const freqsamples[], double const freqresp_db[], int points, int samplingfreq, int origpoints, int bitdepthsoundfile)
+{
+	std::vector<double> eqfreqresp(points);
 	//calculate miminum attenuation depending on the bitdeph (minus one), that is −6.020599913 dB per bit in eccess to sign
-	double dcatt = ((double) (bitdepthsoundfile - 1))*(-6.020599913) + 20.00; //in dB
+	double const dcatt = ((double) (bitdepthsoundfile - 1))*(-6.020599913) + 20.00; //in dB
 	//double dcatt = -90.3;
-	double pass = ((double) (samplingfreq >> 1)) / ((double) points);
+	double const pass = ((double) (samplingfreq >> 1)) / ((double) points);
 	for (int ieq = 0, i = 0; ieq < points; ieq++) {
-		freq = ieq*pass;
+		double const freq = ieq*pass;
 
 		if (freq == 0.0) {
 			eqfreqresp[ieq] = dcatt;
@@ -416,6 +410,7 @@ void equalinterval2(double const freqsamples[], double const freqresp_db[], std:
 			}
 		}
 	}
+	return eqfreqresp;
 }
 
 
