@@ -45,6 +45,10 @@
 
 using namespace leqm_nrt;
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // Version 0.0.18 (C) Luca Trisciani 2011-2013, 2017-2018
 // Tool from the DCP-Werkstatt Software Bundle
 
