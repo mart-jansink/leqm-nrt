@@ -73,16 +73,6 @@ public:
 	   But ISO 21727:2004(E) ask for a reference level "measured using an average responding meter". So reference level is not 0.707, but 0.637 = 2/pi
 	*/
 
-	double mean() const
-	{
-		return pow(_sum / _nsamples, 0.500);
-	}
-
-	double cmean() const
-	{
-		return pow(_csum / _nsamples, 0.500);
-	}
-
 	double rms() const
 	{
 		return 20 * log10(mean()) + 108.010299957;
@@ -94,6 +84,16 @@ public:
 	}
 
 private:
+	double mean() const
+	{
+		return pow(_sum / _nsamples, 0.500);
+	}
+
+	double cmean() const
+	{
+		return pow(_csum / _nsamples, 0.500);
+	}
+
 	double _csum = 0.0; // convolved sum
 	double _sum = 0.0; // flat sum
 	int _nsamples = 0;
