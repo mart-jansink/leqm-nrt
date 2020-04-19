@@ -1,16 +1,16 @@
 def build(bld):
     obj = bld(features='cxx cxxshlib')
-    obj.name = 'libleqm-nrt'
-    obj.target = 'leqm-nrt'
+    obj.name = 'libleqm_nrt'
+    obj.target = 'leqm_nrt'
     obj.export_includes = ['.']
-    obj.source = 'leqm-nrt.cc'
+    obj.source = 'leqm_nrt.cc'
 
     obj = bld(features='cxx cxxprogram')
-    obj.name = 'leqm-nrt-cli'
-    obj.target = 'leqm-nrt'
-    obj.source = 'leqm-nrt-cli.cc'
-    obj.use = 'libleqm-nrt'
+    obj.name = 'leqm_nrt_cli'
+    obj.target = 'leqm_nrt'
+    obj.source = 'leqm_nrt_cli.cc'
+    obj.use = 'libleqm_nrt'
     obj.uselib = 'SNDFILE'
 
-    bld.install_files('${PREFIX}/include', 'leqm-nrt.h')
+    bld.install_files('${PREFIX}/include', 'leqm_nrt.h')
 

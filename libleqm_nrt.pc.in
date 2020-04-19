@@ -2,7 +2,7 @@ prefix=@prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: libleqm-nrt
+Name: libleqm_nrt
 Description: LEQ calculation library
 Version: @version@
 Libs: @libs@
