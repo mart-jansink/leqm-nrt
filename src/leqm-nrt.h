@@ -50,5 +50,3 @@ Result calculate_function(
 	int num_cpu
 	);
 
-
-

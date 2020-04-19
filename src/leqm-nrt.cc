@@ -235,7 +235,7 @@ void convloglin(std::vector<double> const& in, std::vector<double>& out, int poi
 double convlinlog_single(double in);
 double convloglin_single(double in);
 double inputcalib (double dbdiffch);
-void  inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints);
+std::vector<double> inversefft2(std::vector<double> const& eqfreqresp, int npoints);
 
 
 Result calculate_file(
@@ -338,7 +338,6 @@ Result calculate_function(
 	std::vector<double> eqfreqresp_db(number_of_filter_interpolation_points);
 	std::vector<double> eqfreqsamples(number_of_filter_interpolation_points);
 	std::vector<double> eqfreqresp(number_of_filter_interpolation_points);
-	std::vector<double> ir(number_of_filter_interpolation_points * 2);
 
 	equalinterval2(freqsamples, freqresp_db, eqfreqsamples, eqfreqresp_db, number_of_filter_interpolation_points, sample_rate, origpoints, bits_per_sample);
 	convloglin(eqfreqresp_db, eqfreqresp, number_of_filter_interpolation_points);
@@ -349,7 +348,7 @@ Result calculate_function(
 	}
 #endif
 
-	inversefft2(eqfreqresp, ir, number_of_filter_interpolation_points);
+	auto ir = inversefft2(eqfreqresp, number_of_filter_interpolation_points);
 
 	// read through the entire file
 
@@ -455,29 +454,25 @@ double convloglin_single(double in) {
 	return powf(10, in / 20.0f);
 }
 
-// convolution
-
-
-void inversefft2(std::vector<double> const& eqfreqresp, std::vector<double>& ir, int npoints) {
+std::vector<double> inversefft2(std::vector<double> const& eqfreqresp, int npoints)
+{
+	std::vector<double> ir(npoints * 2);
 	for (int n = 0; n < npoints; n++) {
 		double parsum = 0.0;
 		double partial = 0.0;
 
-		for (int m = 1; m <= npoints -1; m++) {
-			partial = cos(2.0*M_PI*((double) m)*( ( ((double) n) - ( ((double) npoints) * 2.0 -1 ) / 2 ) / ( ((double) npoints) * 2.0) ));
-			parsum = parsum + eqfreqresp[m]*partial;
+		for (int m = 1; m <= npoints - 1; m++) {
+			partial = cos(2.0 * M_PI * m * ((n - (npoints * 2.0 - 1) / 2) / (npoints * 2.0)));
+			parsum = parsum + eqfreqresp[m] * partial;
 		}
-		ir[n] = (eqfreqresp[0] + 2.0 * parsum)/((double) npoints * 2.0);
-#ifdef DEBUG
-		printf("%.4f\n", ir[n]);
-#endif
+		ir[n] = (eqfreqresp[0] + 2.0 * parsum) / (npoints * 2.0);
 	}
+
 	for (int n = 0; n < npoints; n++) {
-		ir[npoints+n] = ir[npoints-(n + 1)];
-#ifdef DEBUG
-		printf("%.4f\n", ir[npoints+n]);
-#endif
+		ir[npoints + n] = ir[npoints - (n + 1)];
 	}
+
+	return ir;
 }
 
 // scale input according to required calibration
