@@ -317,9 +317,6 @@ Result calculate_function(
 		return -102;
 	}
 
-	int buffer_size_samples = (sample_rate * channels * buffer_size_ms) / 1000;
-	std::vector<double> buffer(buffer_size_samples);
-
 	auto ir = calculate_ir(number_of_filter_interpolation_points, sample_rate, bits_per_sample);
 
 	// read through the entire file
@@ -333,6 +330,8 @@ Result calculate_function(
 	int worker_id = 0;
 	std::vector<std::shared_ptr<Worker>> worker_args;
 
+	int const buffer_size_samples = (sample_rate * channels * buffer_size_ms) / 1000;
+	std::vector<double> buffer(buffer_size_samples);
 	while ((samples_read = get_audio_data(buffer.data(), buffer_size_samples)) > 0) {
 		worker_args.push_back(
 			std::make_shared<Worker>(
