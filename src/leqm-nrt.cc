@@ -149,14 +149,13 @@ private:
 		return 0;
 	}
 
-	//rectify, square and sum
-	int rectify(std::vector<double>& squared, std::vector<double> const& input_samples, int nsamples) const
+	std::vector<double> rectify(std::vector<double> const& input) const
 	{
-		for (auto i = 0; i < nsamples; i++) {
-			squared[i] = powf(input_samples[i], 2);
+		std::vector<double> squared;
+		for (auto i: input) {
+			squared.push_back(pow(i, 2));
 		}
-		return 0;
-
+		return squared;
 	}
 
 	std::vector<double> convolve(std::vector<double> const& signal, std::vector<double> const& ir) const
@@ -199,8 +198,8 @@ private:
 			//convolution
 			auto convolved_buffer = convolve(normalized_buffer, _ir);
 			//rectify, square und sum
-			rectify(c_sum_and_square_buffer, convolved_buffer, frames);
-			rectify(sum_and_square_buffer, normalized_buffer, frames);
+			c_sum_and_square_buffer = rectify(convolved_buffer);
+			sum_and_square_buffer = rectify(normalized_buffer);
 
 			accumulate_ch(ch_sum_accumulator_norm, sum_and_square_buffer, frames);
 			accumulate_ch(ch_sum_accumulator_conv, c_sum_and_square_buffer, frames);
