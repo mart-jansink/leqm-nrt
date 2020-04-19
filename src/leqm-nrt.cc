@@ -230,29 +230,28 @@ static std::vector<double> equalinterval2(int points, int samplingfreq, int bitd
 	//double dcatt = -90.3;
 	double const pass = ((double) (samplingfreq >> 1)) / ((double) points);
 	for (int ieq = 0, i = 0; ieq < points; ieq++) {
-		double const freq = ieq*pass;
+		double const freq = ieq * pass;
 
 		if (freq == 0.0) {
 			freq_response[ieq] = dcatt;
 		} else if (freq < frequencies[0]) { // this has a lot of influence on final Leq(M) value
 			freq_response[ieq] = ((db[0] - dcatt) / (frequencies[0] - 0)) * freq + dcatt;
-			//freq_response[ieq] = db[0]; // Is this meaningful? Shouldn't I interpolate between 0 Hz and 31 Hz? Otherwise for DC I have -35.5 dB
 			continue;
 		} else {
 
-			if ((freq >= frequencies[i]) && (freq < frequencies[i+1])) {
-				freq_response[ieq] = ((db[i+1] - db[i])/(frequencies[i+1] - frequencies[i]))*(freq - frequencies[i]) + db[i];
-			} else if (freq >=frequencies[i+1]) {
-				while(freq >= frequencies[i+1]) {
+			if (freq >= frequencies[i] && freq < frequencies[i+1]) {
+				freq_response[ieq] = ( (db[i+1] - db[i]) / (frequencies[i+1] - frequencies[i])) * (freq - frequencies[i]) + db[i];
+			} else if (freq >= frequencies[i+1]) {
+				while (freq >= frequencies[i+1]) {
 					i++;
 					if ((i + 1) >= points_in_standard_ccir_filter) {
 						break;
 					}
 				}
 				if ((i+1) < points_in_standard_ccir_filter) {
-					freq_response[ieq] = ((db[i+1] - db[i])/(frequencies[i+1] - frequencies[i]))*(freq- frequencies[i]) + db[i];
+					freq_response[ieq] = ( (db[i+1] - db[i]) / (frequencies[i+1] - frequencies[i])) * (freq - frequencies[i]) + db[i];
 				} else {
-					freq_response[ieq] = ((1 - db[i])/(((double) (samplingfreq >> 1)) - frequencies[i]))*(freq- frequencies[i]) + db[i];
+					freq_response[ieq] = ( (1 - db[i]) / ((samplingfreq >> 1) - frequencies[i])) * (freq - frequencies[i]) + db[i];
 				}
 			}
 		}
