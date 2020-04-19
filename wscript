@@ -19,7 +19,7 @@ def configure(conf):
     conf.check_cfg(package='sndfile', args='--cflags --libs', uselib_store='SNDFILE')
 
 def build(bld):
-    bld(source='libleqm_nrt.pc.in',
+    bld(source='leqm_nrt.pc.in',
         version=VERSION,
         includedir='%s/include/libdcp%s' % (bld.env.PREFIX, bld.env.API_VERSION),
         libs="-L${libdir} -lleqm_nrt",
