@@ -1,4 +1,7 @@
 def build(target, options):
-    target.command('./waf configure --without-libsndfile --prefix=%s' % target.directory)
+    cmd = './waf configure --without-libsndfile --prefix=%s' % target.directory
+    if target.platform == 'linux':
+        cmd += ' --static'
+    target.command(cmd)
     target.command('./waf build install')
 
