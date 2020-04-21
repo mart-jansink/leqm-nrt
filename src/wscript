@@ -14,4 +14,4 @@ def build(bld):
         obj.uselib = 'SNDFILE'
 
     bld.install_files('${PREFIX}/include', 'leqm_nrt.h')
-
+    bld.install_files('${PREFIX}/lib', 'libleqm_nrt.a')
