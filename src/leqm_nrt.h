@@ -168,6 +168,11 @@ public:
 		int num_cpu
 	);
 
+	~Calculator()
+	{
+		_workers.clear();
+	}
+
 	Calculator(Calculator&) = delete;
 	Calculator(Calculator&&) = delete;
 	bool operator=(Calculator&) = delete;
