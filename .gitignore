@@ -2,3 +2,5 @@ build
 test
 .waf-2*
 .lock-waf*
+.ccls-cache*
+.waf3*
