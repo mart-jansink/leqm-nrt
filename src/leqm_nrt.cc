@@ -57,11 +57,10 @@ namespace leqm_nrt {
 class Worker
 {
 public:
-	Worker(std::vector<double> buffer, int nsamples, int nch, int npoints, std::vector<double> const& ir, Sum* sum, std::vector<double> chconf)
+	Worker(std::vector<double> buffer, int nsamples, int nch, std::vector<double> const& ir, Sum* sum, std::vector<double> chconf)
 		: _buffer(buffer)
 		, _nsamples(nsamples)
 		, _nch(nch)
-		, _npoints(npoints)
 		, _ir(ir)
 		, _sum(sum)
 		, _chconf(chconf)
@@ -157,7 +156,6 @@ private:
 	std::vector<double> _buffer;
 	int _nsamples;
 	int _nch;
-	int _npoints;
 	std::vector<double> const& _ir;
 	Sum* _sum;
 	std::vector<double> _chconf;
@@ -383,7 +381,6 @@ void Calculator::process_buffer()
 				_buffer,
 				_buffer_free_offset,
 				_channels,
-				_number_of_filter_interpolation_points,
 				_ir,
 				&_sum,
 				_channel_corrections
