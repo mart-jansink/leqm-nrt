@@ -351,7 +351,6 @@ Calculator::Calculator(
 	)
 	: _channels(channels)
 	, _channel_corrections(channel_corrections)
-	, _number_of_filter_interpolation_points(number_of_filter_interpolation_points)
 	, _num_cpu(num_cpu)
 {
 	if ((sample_rate * buffer_size_ms) % 1000) {

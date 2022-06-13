@@ -188,7 +188,6 @@ private:
 
 	int _channels;
 	std::vector<double> _channel_corrections;
-	int _number_of_filter_interpolation_points;
 	int _num_cpu;
 	std::vector<std::shared_ptr<Worker>> _workers;
 	Sum _sum;
