@@ -357,10 +357,10 @@ Calculator::Calculator(
 		throw BadBufferSizeError();
 	}
 
-	if (static_cast<int>(channel_corrections.size()) != channels) {
-		channel_corrections = default_channel_corrections(channels);
+	if (static_cast<int>(_channel_corrections.size()) != channels) {
+		_channel_corrections = default_channel_corrections(channels);
 	}
-	if (static_cast<int>(channel_corrections.size()) != channels) {
+	if (static_cast<int>(_channel_corrections.size()) != channels) {
 		throw BadChannelCorrectionsError();
 	}
 
