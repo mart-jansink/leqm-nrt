@@ -27,7 +27,7 @@ def configure(conf):
 def build(bld):
     bld(source='leqm_nrt.pc.in',
         version=VERSION,
-        includedir='%s/include/libdcp%s' % (bld.env.PREFIX, bld.env.API_VERSION),
+        includedir='%s/include' % bld.env.PREFIX,
         libs="-L${libdir} -lleqm_nrt",
         install_path='${LIBDIR}/pkgconfig')
 
