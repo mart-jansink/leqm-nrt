@@ -130,7 +130,8 @@ private:
 
 	void process()
 	{
-		int const frames = _nsamples / _nch;
+		/* Round-up in case _nsamples is not a multiple of _nch */
+		int const frames = (_nsamples + _nch - 1) / _nch;
 
 		std::vector<double> ch_sum_accumulator_norm(frames);
 		std::vector<double> ch_sum_accumulator_conv(frames);
