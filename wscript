@@ -21,7 +21,7 @@ def configure(conf):
     if conf.env.WITH_LIBSNDFILE:
         conf.env.append_value('CXXFLAGS', ['-DLEQM_NRT_WITH_LIBSNDFILE'])
         conf.check_cfg(package='sndfile', args='--cflags --libs', uselib_store='SNDFILE')
-    conf.env.append_value('CXXFLAGS', ['-Wall', '-Wextra', '-D_FILE_OFFSET_BITS=64', '-D__STDC_FORMAT_MACROS', '-std=c++11'])
+    conf.env.append_value('CXXFLAGS', ['-Wall', '-Wextra', '-D_FILE_OFFSET_BITS=64', '-D__STDC_FORMAT_MACROS', '-std=c++11', '-O2'])
     conf.env.append_value('LINKFLAGS', ['-pthread'])
 
 def build(bld):
