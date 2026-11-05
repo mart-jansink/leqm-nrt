@@ -1,7 +1,16 @@
-def build(target, options):
-    cmd = './waf configure --without-libsndfile --prefix=%s' % target.directory
-    if target.platform == 'linux':
-        cmd += ' --static'
-    target.command(cmd)
-    target.command('./waf build install')
+import os
+
+def build(target, options, for_package, version):
+    if for_package and target.platform == 'linux' and target.distro == 'arch':
+        target.command('git clone https://aur.archlinux.org/leqm-nrt.git')
+        os.chdir('leqm-nrt')
+        target.command('sed -i "s/commit=\${_commit}/branch=carl/" PKGBUILD')
+        target.command('makepkg --skipinteg')
+        target.command('sudo pacman --noconfirm -U leqm-nrt*.zst')
+    else:
+        cmd = './waf configure --without-libsndfile --prefix=%s' % target.directory
+        if target.platform == 'linux':
+            cmd += ' --static'
+        target.command(cmd)
+        target.command('./waf build install')
 

@@ -10,6 +10,7 @@ def build(bld):
     obj.source = 'leqm_nrt.cc'
 
     if bld.env.WITH_LIBSNDFILE:
+        obj.uselib = 'SNDFILE'
         obj = bld(features='cxx cxxprogram')
         obj.name = 'leqm_nrt_cli'
         obj.target = 'leqm_nrt'
